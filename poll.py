@@ -163,21 +163,37 @@ def classify_location(lat: float | None, lon: float | None, settings: dict) -> s
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC")
 
 
-def notify_public_charge_needs_rate(session_id: int, energy_kwh: float | None, default_cost: float | None) -> None:
+def notify_charge_finished(
+    location_type: str,
+    start_pct: float | None,
+    end_pct: float | None,
+    range_added_km: float | None,
+    energy_kwh: float | None,
+    cost: float | None,
+    rate_confirmed: bool,
+    session_id: int,
+) -> None:
     if not NTFY_TOPIC:
         return
-    energy_str = f"{energy_kwh:.1f} kWh" if energy_kwh is not None else "unknown energy"
-    cost_str = f"${default_cost:.2f}" if default_cost is not None else "unknown cost"
-    message = (
-        f"Public charge finished: {energy_str} added, estimated {cost_str} "
-        f"using the default rate. Session #{session_id} \u2014 reply to Claude to "
-        f"set the real rate if you know it."
-    )
+
+    pct_str = f"{start_pct}% \u2192 {end_pct}%" if (start_pct is not None and end_pct is not None) else "unknown %"
+    range_str = f"{range_added_km:+.0f} km range" if range_added_km is not None else "range unknown"
+    energy_str = f"{energy_kwh:.1f} kWh" if energy_kwh is not None else "unknown kWh"
+    cost_str = f"${cost:.2f}" if cost is not None else "unknown cost"
+    place = "Home" if location_type == "home" else ("Public" if location_type == "public" else "Unknown location")
+
+    message = f"{place} charge finished: {pct_str}, {range_str}, {energy_str} added, {cost_str}."
+    if not rate_confirmed:
+        message += f" Rate is a default estimate \u2014 reply to Claude to set the real rate for session #{session_id}."
+
     try:
         requests.post(
             f"https://ntfy.sh/{NTFY_TOPIC}",
             data=message.encode("utf-8"),
-            headers={"Title": "BYD Atto 3 \u2014 confirm public charge rate", "Priority": "default"},
+            headers={
+                "Title": f"BYD Atto 3 \u2014 {place.lower()} charge done",
+                "Priority": "default",
+            },
             timeout=10,
         )
     except Exception as exc:  # noqa: BLE001 - notification failure shouldn't break the poll
@@ -234,6 +250,7 @@ async def fetch_vehicle_state() -> dict:
             "is_charging": is_charging,
             "charging_power_kw": charging_power_kw,
             "odometer_km": realtime.total_mileage,
+            "range_km": realtime.ev_endurance,
             "latitude": latitude,
             "longitude": longitude,
             "raw": {
@@ -268,6 +285,7 @@ def main() -> None:
                     "started_at": now,
                     "start_pct": state["battery_pct"],
                     "start_odometer_km": state["odometer_km"],
+                    "start_range_km": state["range_km"],
                     "start_latitude": state["latitude"],
                     "start_longitude": state["longitude"],
                     "location_type": location_type,
@@ -301,6 +319,12 @@ def main() -> None:
             if last_closed and last_closed.get("end_odometer_km") is not None and state["odometer_km"] is not None:
                 km_since_last_charge = open_session["start_odometer_km"] - last_closed["end_odometer_km"]
 
+            start_range_km = open_session.get("start_range_km")
+            end_range_km = state["range_km"]
+            range_added_km = (
+                end_range_km - start_range_km if (start_range_km is not None and end_range_km is not None) else None
+            )
+
             location_type = open_session.get("location_type") or "unknown"
             if location_type == "home" and settings.get("home_rate_per_kwh") is not None:
                 electricity_rate = settings["home_rate_per_kwh"]
@@ -319,6 +343,8 @@ def main() -> None:
                     "ended_at": now,
                     "end_pct": end_pct,
                     "end_odometer_km": state["odometer_km"],
+                    "end_range_km": end_range_km,
+                    "range_added_km": range_added_km,
                     "energy_added_kwh": energy_added_kwh,
                     "electricity_rate": electricity_rate,
                     "km_since_last_charge": km_since_last_charge,
@@ -330,9 +356,17 @@ def main() -> None:
                 f"{energy_added_kwh} kWh @ {location_type} rate ({estimate_method})"
             )
 
-            if location_type == "public" and energy_added_kwh is not None:
-                default_cost = energy_added_kwh * electricity_rate if electricity_rate is not None else None
-                notify_public_charge_needs_rate(open_session["id"], energy_added_kwh, default_cost)
+            cost = energy_added_kwh * electricity_rate if (energy_added_kwh is not None and electricity_rate is not None) else None
+            notify_charge_finished(
+                location_type=location_type,
+                start_pct=start_pct,
+                end_pct=end_pct,
+                range_added_km=range_added_km,
+                energy_kwh=energy_added_kwh,
+                cost=cost,
+                rate_confirmed=rate_confirmed,
+                session_id=open_session["id"],
+            )
 
 
 if __name__ == "__main__":
