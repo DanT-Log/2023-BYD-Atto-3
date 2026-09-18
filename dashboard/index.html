@@ -317,6 +317,64 @@
   .last-charge-sub{ font-size: 13px; color: var(--text-secondary); margin-top: 1px; }
   .last-charge-cost{ text-align: right; font-size: 17px; font-weight: 590; font-variant-numeric: tabular-nums; flex-shrink: 0; }
 
+  .edit-link{
+    border: none;
+    background: none;
+    color: var(--blue);
+    font-size: 14px;
+    font-weight: 500;
+    padding: 4px 16px 4px 8px;
+    cursor: pointer;
+  }
+  .edit-link:active{ opacity: 0.5; }
+  .edit-pad{ padding: 16px; }
+  .edit-label{
+    display: block;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+  .edit-input{
+    width: 100%;
+    font-family: inherit;
+    font-size: 16px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 0.5px solid var(--hairline);
+    background: var(--bg);
+    color: var(--text);
+    box-sizing: border-box;
+  }
+  .edit-actions{ display: flex; gap: 10px; }
+  .edit-btn-save, .edit-btn-cancel{
+    flex: 1;
+    padding: 11px;
+    border-radius: 10px;
+    border: none;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 590;
+    cursor: pointer;
+  }
+  .edit-btn-save{ background: var(--blue); color: #fff; }
+  .edit-btn-save:active{ opacity: 0.7; }
+  .edit-btn-cancel{ background: rgba(118,118,128,0.16); color: var(--text); }
+  .edit-btn-cancel:active{ opacity: 0.7; }
+  .edit-status{ font-size: 13px; color: var(--text-secondary); margin-top: 10px; text-align: center; }
+  .edit-status.error{ color: var(--orange); }
+
+  .insight-row{
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 0.5px solid var(--hairline);
+    font-size: 14.5px;
+    line-height: 1.4;
+  }
+  .insight-row:last-child{ border-bottom: none; }
+  .insight-row svg{ width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px; color: var(--green); }
+
   .empty{
     padding: 28px 16px;
     text-align: center;
@@ -625,6 +683,11 @@
       </div>
 
       <div class="group">
+        <div class="group-header">Insights</div>
+        <div class="group-card" id="insights-card"></div>
+      </div>
+
+      <div class="group">
         <div class="group-header">Overview</div>
         <div class="segmented" id="period-tabs">
           <button data-period="daily">Daily</button>
@@ -648,10 +711,46 @@
       </div>
 
       <div class="group">
+        <div class="group-header">Battery Health</div>
+        <div class="group-card" id="battery-health-card"></div>
+      </div>
+
+      <div class="group">
         <div class="group-header">Efficiency</div>
         <div class="group-card">
           <div class="row"><span class="k">Your tracked efficiency</span><span class="v" id="tracked-efficiency">—</span></div>
           <div class="row"><span class="k">Car's own estimate</span><span class="v" id="car-efficiency">—</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group-header-row">
+          <div class="group-header">Cost of Ownership</div>
+          <button class="edit-link" id="add-expense-btn">Add Expense</button>
+        </div>
+        <div class="group-card" id="ownership-card"></div>
+        <div class="group-card expense-form" id="expense-form" style="display:none; margin-top:10px;">
+          <div class="edit-pad">
+            <label class="edit-label">Category</label>
+            <select id="expense-category" class="edit-input" style="margin-bottom:14px;">
+              <option value="registration">Registration</option>
+              <option value="insurance">Insurance</option>
+              <option value="tyres">Tyres</option>
+              <option value="servicing">Servicing</option>
+              <option value="other">Other</option>
+            </select>
+            <label class="edit-label">Amount ($)</label>
+            <input type="number" step="0.01" min="0" id="expense-amount" class="edit-input" style="margin-bottom:14px;">
+            <label class="edit-label">Date</label>
+            <input type="date" id="expense-date" class="edit-input" style="margin-bottom:14px;">
+            <label class="edit-label">Notes (optional)</label>
+            <input type="text" id="expense-notes" class="edit-input" placeholder="e.g. front tyres, Bob Jane">
+            <div class="edit-actions" style="margin-top:16px;">
+              <button class="edit-btn-save" id="expense-save-btn">Save</button>
+              <button class="edit-btn-cancel" id="expense-cancel-btn">Cancel</button>
+            </div>
+            <div class="edit-status" id="expense-status"></div>
+          </div>
         </div>
       </div>
 
@@ -1101,6 +1200,199 @@ async function renderPetrolFun(allDoneSessions) {
   }
 }
 
+// ---------- Insights ----------
+function computeInsights(sessions) {
+  const insights = [];
+  if (sessions.length === 0) return insights;
+
+  const now = new Date();
+  const thisWeekStart = startOfWeek(now);
+  const lastWeekStart = new Date(thisWeekStart);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+  const thisWeek = sessions.filter(s => new Date(s.started_at) >= thisWeekStart);
+  const lastWeek = sessions.filter(s => {
+    const d = new Date(s.started_at);
+    return d >= lastWeekStart && d < thisWeekStart;
+  });
+  const thisWeekSpend = thisWeek.reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
+  const lastWeekSpend = lastWeek.reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
+  if (lastWeekSpend > 0) {
+    const pctChange = ((thisWeekSpend - lastWeekSpend) / lastWeekSpend) * 100;
+    if (Math.abs(pctChange) >= 5) {
+      insights.push(`You're ${pctChange > 0 ? 'up' : 'down'} ${Math.abs(pctChange).toFixed(0)}% vs last week (${fmtMoney(thisWeekSpend)} vs ${fmtMoney(lastWeekSpend)}).`);
+    }
+  }
+
+  const withCost = sessions.filter(s => s.cost != null);
+  if (withCost.length >= 2) {
+    const cheapest = withCost.reduce((a, b) => Number(b.cost) < Number(a.cost) ? b : a);
+    const priciest = withCost.reduce((a, b) => Number(b.cost) > Number(a.cost) ? b : a);
+    insights.push(`Cheapest charge: ${fmtMoney(cheapest.cost)} on ${fmtDate(cheapest.started_at)}.`);
+    insights.push(`Priciest charge: ${fmtMoney(priciest.cost)} on ${fmtDate(priciest.started_at)}.`);
+  }
+
+  let streak = 0;
+  for (const s of sessions) {
+    if (s.location_type === 'home') streak++;
+    else break;
+  }
+  if (streak >= 3) insights.push(`You've charged at home ${streak} times in a row.`);
+
+  const withKm = sessions.filter(s => Number(s.km_since_last_charge) > 0 && s.cost != null);
+  if (withKm.length >= 2) {
+    const best = withKm.reduce((a, b) =>
+      (Number(b.cost) / Number(b.km_since_last_charge)) < (Number(a.cost) / Number(a.km_since_last_charge)) ? b : a
+    );
+    const centsPerKm = (Number(best.cost) / Number(best.km_since_last_charge)) * 100;
+    insights.push(`Best value charge: ${centsPerKm.toFixed(1)}\u00a2/km on ${fmtDate(best.started_at)}.`);
+  }
+
+  return insights.slice(0, 4);
+}
+
+function renderInsights(sessions) {
+  const el = document.getElementById('insights-card');
+  const insights = computeInsights(sessions);
+  if (insights.length === 0) {
+    el.innerHTML = '<div class="empty">Keep charging \u2014 insights will show up once there\'s enough history.</div>';
+    return;
+  }
+  const bulbIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.5h6c0-1.1.4-1.9 1-2.5A6 6 0 0 0 12 2Z"/></svg>`;
+  el.innerHTML = insights.map(text => `<div class="insight-row">${bulbIcon}<span>${text}</span></div>`).join('');
+}
+
+// ---------- Battery Health ----------
+function computeBatteryHealth(sessions, ratedCapacity) {
+  const qualifying = sessions.filter(s => {
+    const delta = (s.end_pct != null && s.start_pct != null) ? (s.end_pct - s.start_pct) : 0;
+    return delta >= 15 && s.energy_added_kwh != null;
+  });
+  if (qualifying.length < 3) return null;
+
+  const recent = qualifying.slice(0, 10); // already sorted desc by started_at
+  const capacities = recent.map(s => Number(s.energy_added_kwh) / ((s.end_pct - s.start_pct) / 100)).sort((a, b) => a - b);
+  const median = capacities[Math.floor(capacities.length / 2)];
+  const healthPct = ratedCapacity > 0 ? (median / ratedCapacity) * 100 : null;
+  return { estimatedCapacity: median, healthPct, sampleSize: recent.length };
+}
+
+async function renderBatteryHealth(sessions) {
+  const el = document.getElementById('battery-health-card');
+  try {
+    const settingsRows = await sb('tracker_settings?select=battery_capacity_kwh');
+    const rated = settingsRows[0]?.battery_capacity_kwh;
+    const health = computeBatteryHealth(sessions, rated);
+    if (!health) {
+      el.innerHTML = '<div class="empty">Need a few more charges with 15%+ gained to estimate battery health.</div>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="row"><span class="k">Estimated capacity</span><span class="v">${health.estimatedCapacity.toFixed(1)} kWh</span></div>
+      <div class="row"><span class="k">Rated capacity</span><span class="v">${Number(rated).toFixed(1)} kWh</span></div>
+      <div class="row"><span class="k">Health</span><span class="v">${health.healthPct != null ? health.healthPct.toFixed(0) + '%' : '\u2014'}</span></div>
+    `;
+  } catch (err) {
+    el.innerHTML = '';
+    console.error('battery health failed', err);
+  }
+}
+
+// ---------- Cost of Ownership ----------
+const EXPENSE_CATEGORY_LABELS = {
+  registration: 'Registration',
+  insurance: 'Insurance',
+  tyres: 'Tyres',
+  servicing: 'Servicing',
+  other: 'Other',
+};
+
+async function loadOwnership(allDoneSessions) {
+  const el = document.getElementById('ownership-card');
+  try {
+    const expenses = await sb('vehicle_expenses?select=*&order=expense_date.desc');
+    const chargingTotal = allDoneSessions.reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
+
+    const byCategory = {};
+    expenses.forEach(e => { byCategory[e.category] = (byCategory[e.category] || 0) + Number(e.amount); });
+    const expenseTotal = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
+    const grandTotal = chargingTotal + expenseTotal;
+
+    let rows = `<div class="row"><span class="k">Charging</span><span class="v">${fmtMoney(chargingTotal)}</span></div>`;
+    Object.keys(EXPENSE_CATEGORY_LABELS).forEach(cat => {
+      if (byCategory[cat]) {
+        rows += `<div class="row"><span class="k">${EXPENSE_CATEGORY_LABELS[cat]}</span><span class="v">${fmtMoney(byCategory[cat])}</span></div>`;
+      }
+    });
+    rows += `<div class="row"><span class="k" style="font-weight:590;">Total</span><span class="v" style="color:var(--text); font-weight:700;">${fmtMoney(grandTotal)}</span></div>`;
+    el.innerHTML = rows;
+  } catch (err) {
+    el.innerHTML = '<div class="empty">Couldn\'t load ownership costs.</div>';
+    console.error('ownership load failed', err);
+  }
+}
+
+document.getElementById('add-expense-btn').addEventListener('click', () => {
+  const form = document.getElementById('expense-form');
+  const showing = form.style.display !== 'none';
+  form.style.display = showing ? 'none' : 'block';
+  if (!showing) {
+    document.getElementById('expense-date').value = new Date().toISOString().slice(0, 10);
+  }
+});
+
+document.getElementById('expense-cancel-btn').addEventListener('click', () => {
+  document.getElementById('expense-form').style.display = 'none';
+  document.getElementById('expense-status').textContent = '';
+});
+
+document.getElementById('expense-save-btn').addEventListener('click', async () => {
+  const status = document.getElementById('expense-status');
+  status.classList.remove('error');
+
+  const category = document.getElementById('expense-category').value;
+  const amount = parseFloat(document.getElementById('expense-amount').value);
+  const expense_date = document.getElementById('expense-date').value;
+  const notes = document.getElementById('expense-notes').value;
+
+  if (isNaN(amount) || amount < 0 || !expense_date) {
+    status.textContent = 'Enter a valid amount and date.';
+    status.classList.add('error');
+    return;
+  }
+
+  const passkey = await getPasskey();
+  if (!passkey) return;
+
+  status.textContent = 'Saving\u2026';
+  try {
+    let res = await fetch(`${SUPABASE_URL}/functions/v1/add-expense`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passkey, category, amount, expense_date, notes }),
+    });
+    if (res.status === 401) {
+      clearStoredPasskey();
+      const retryKey = await getPasskey('Incorrect passkey \u2014 try again.');
+      if (!retryKey) { status.textContent = ''; return; }
+      res = await fetch(`${SUPABASE_URL}/functions/v1/add-expense`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passkey: retryKey, category, amount, expense_date, notes }),
+      });
+    }
+    if (!res.ok) throw new Error('save failed');
+    document.getElementById('expense-form').style.display = 'none';
+    document.getElementById('expense-amount').value = '';
+    document.getElementById('expense-notes').value = '';
+    status.textContent = '';
+    await loadOwnership(allSessions);
+  } catch (err) {
+    status.textContent = 'Failed to save \u2014 try again.';
+    status.classList.add('error');
+    console.error(err);
+  }
+});
+
 async function loadEfficiency() {
   try {
     const tracked = computeTrackedEfficiency(allSessions);
@@ -1154,9 +1446,12 @@ async function load() {
     applyPeriod();
     renderSessions(sessions);
     renderLastChargeCard(allSessions[0]);
+    renderInsights(allSessions);
     await loadLiveStatus();
     await loadLocationCard();
     await loadEfficiency();
+    await renderBatteryHealth(allSessions);
+    await loadOwnership(allSessions);
     await renderPetrolFun(allSessions);
   } catch (err) {
     document.getElementById('total-spent-sub').textContent = 'Failed to load — check back shortly';
