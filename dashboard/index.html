@@ -173,6 +173,19 @@
     letter-spacing: 0.02em;
     margin: 0 0 8px 16px;
   }
+  .group-header-row{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0 16px 8px 0;
+  }
+  .group-header-row .group-header{ margin: 0 0 0 16px; }
+  .view-all-link{
+    font-size: 13px;
+    font-weight: 590;
+    color: var(--blue);
+  }
+  .view-all-link:active{ opacity: 0.5; }
   .group-card{
     background: var(--card);
     border-radius: 14px;
@@ -430,12 +443,6 @@
       <div class="status-grid" id="status-grid" style="display:none;"></div>
     </div>
 
-    <div class="hero">
-      <div class="hero-label">Total spent charging</div>
-      <div class="hero-amount" id="total-spent">$0.00</div>
-      <div class="hero-sub" id="total-spent-sub">loading…</div>
-    </div>
-
     <div class="group">
       <div class="group-header">Overview</div>
       <div class="segmented" id="period-tabs">
@@ -468,11 +475,20 @@
     </div>
 
     <div class="group">
-      <div class="group-header">Recent Charges</div>
+      <div class="group-header-row">
+        <div class="group-header">Recent Charges</div>
+        <a class="view-all-link" href="charges.html">View All</a>
+      </div>
       <div class="group-card" id="sessions"></div>
     </div>
 
     <div class="footnote">Updates automatically as the car reports new data. Tap a charge for full details.</div>
+
+    <div class="hero">
+      <div class="hero-label">Total spent charging</div>
+      <div class="hero-amount" id="total-spent">$0.00</div>
+      <div class="hero-sub" id="total-spent-sub">loading…</div>
+    </div>
 
     <div class="group fun-group">
       <div class="group-header">Just For Fun</div>
@@ -560,7 +576,7 @@ function applyPeriod() {
 
 function renderSessions(sessions) {
   const el = document.getElementById('sessions');
-  const done = sessions.filter(s => s.ended_at);
+  const done = sessions.filter(s => s.ended_at).slice(0, 5);
 
   if (done.length === 0) {
     el.innerHTML = '<div class="empty">No completed charges yet — check back once the car finishes a charge.</div>';

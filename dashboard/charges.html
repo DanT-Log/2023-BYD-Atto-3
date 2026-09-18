@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>All Charges — Atto 3</title>
+
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="/icon-192.png" type="image/png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+
+<style>
+  :root{
+    --bg: #F2F2F7;
+    --card: #FFFFFF;
+    --hairline: rgba(60,60,67,0.29);
+    --text: #1C1C1E;
+    --text-secondary: #8E8E93;
+    --green: #34C759;
+    --blue: #007AFF;
+    --orange: #FF9500;
+    --card-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 8px 30px rgba(0,0,0,0.045);
+    --active-tint: rgba(60,60,67,0.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg: #000000;
+      --card: #1C1C1E;
+      --hairline: rgba(84,84,88,0.6);
+      --text: #FFFFFF;
+      --text-secondary: #8E8E93;
+      --green: #30D158;
+      --blue: #0A84FF;
+      --orange: #FF9F0A;
+      --card-shadow: none;
+      --active-tint: rgba(255,255,255,0.06);
+    }
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  a { text-decoration: none; color: inherit; }
+  body{
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  .wrap{
+    max-width: 480px;
+    margin: 0 auto;
+    padding: max(16px, calc(env(safe-area-inset-top) + 8px)) 16px calc(56px + env(safe-area-inset-bottom));
+  }
+
+  .back{
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    color: var(--blue);
+    font-size: 17px;
+    padding: 6px 4px 6px 0;
+    margin-bottom: 8px;
+  }
+  .back svg{ width: 22px; height: 22px; }
+  .back:active{ opacity: 0.5; }
+
+  .title{
+    font-size: 34px;
+    font-weight: 700;
+    letter-spacing: -0.021em;
+    margin: 4px 2px 20px;
+  }
+
+  .group-card{
+    background: var(--card);
+    border-radius: 14px;
+    box-shadow: var(--card-shadow);
+    overflow: hidden;
+  }
+
+  .session{
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 0.5px solid var(--hairline);
+    transition: background .15s ease;
+  }
+  .session:last-child{ border-bottom: none; }
+  .session:active{ background: var(--active-tint); }
+
+  .avatar{
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--green);
+  }
+  .avatar.public{ background: var(--blue); }
+  .avatar svg{ width: 17px; height: 17px; }
+
+  .session-mid{ flex: 1; min-width: 0; }
+  .session-title{ font-size: 15.5px; font-weight: 500; }
+  .session-sub{ font-size: 13px; color: var(--text-secondary); margin-top: 1px; }
+
+  .session-amt{ text-align: right; flex-shrink: 0; }
+  .session-amt .cost{ font-size: 15.5px; font-weight: 590; font-variant-numeric: tabular-nums; }
+  .session-amt .place{ font-size: 12px; color: var(--text-secondary); margin-top: 1px; }
+  .session-amt .place.unconfirmed{ color: var(--orange); }
+
+  .month-header{
+    font-size: 13px;
+    font-weight: 590;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    margin: 24px 0 8px 16px;
+  }
+  .month-header:first-child{ margin-top: 0; }
+
+  .load-more{
+    display: block;
+    width: 100%;
+    margin-top: 20px;
+    padding: 13px;
+    border-radius: 12px;
+    border: none;
+    background: var(--card);
+    box-shadow: var(--card-shadow);
+    color: var(--blue);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 590;
+    cursor: pointer;
+  }
+  .load-more:active{ opacity: 0.6; }
+  .load-more:disabled{ color: var(--text-secondary); }
+
+  .empty, .loading{
+    padding: 40px 16px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 14.5px;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <a class="back" href="index.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      Atto 3
+    </a>
+    <div class="title">All Charges</div>
+
+    <div id="content"><div class="loading">Loading…</div></div>
+    <button class="load-more" id="load-more-btn" style="display:none;">Load More</button>
+  </div>
+
+<script>
+const SUPABASE_URL = "https://ujpcabmacpnbtyiharnk.supabase.co";
+const SUPABASE_KEY = "sb_publishable_MYvAXGlFH-AyOkGU-FceYg_THPLZqCy";
+const PAGE_SIZE = 20;
+
+const ICON_HOME = `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H9a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h2.5a1 1 0 0 0 1-1v-9"/></svg>`;
+const ICON_PUBLIC = `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.1 7-11.5A7 7 0 0 0 5 9.5C5 14.9 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.3"/></svg>`;
+
+async function sb(path) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  });
+  if (!res.ok) throw new Error(`Supabase fetch failed: ${res.status}`);
+  return res.json();
+}
+
+const fmtMoney = (n) => n == null ? "—" : `$${Number(n).toFixed(2)}`;
+const fmtKwh = (n) => n == null ? "—" : `${Number(n).toFixed(1)} kWh`;
+const fmtDate = (iso) => new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+const fmtTime = (iso) => new Date(iso).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' });
+const monthKey = (iso) => {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
+};
+
+let offset = 0;
+let allLoaded = [];
+
+function sessionRow(s) {
+  const isHome = s.location_type === 'home';
+  const placeLabel = isHome ? 'Home' : 'Public Charger';
+  const timeRange = `${fmtTime(s.started_at)}–${fmtTime(s.ended_at)}`;
+  return `
+    <a class="session" href="session.html?id=${s.id}">
+      <div class="avatar ${isHome ? '' : 'public'}">${isHome ? ICON_HOME : ICON_PUBLIC}</div>
+      <div class="session-mid">
+        <div class="session-title">${s.start_pct != null && s.end_pct != null ? `${s.start_pct}% → ${s.end_pct}%` : fmtDate(s.started_at)}</div>
+        <div class="session-sub">${fmtDate(s.started_at)}, ${timeRange} · ${fmtKwh(s.energy_added_kwh)}</div>
+      </div>
+      <div class="session-amt">
+        <div class="cost">${fmtMoney(s.cost)}</div>
+        <div class="place ${s.rate_confirmed === false ? 'unconfirmed' : ''}">${placeLabel}</div>
+      </div>
+    </a>
+  `;
+}
+
+function render() {
+  const content = document.getElementById('content');
+
+  if (allLoaded.length === 0) {
+    content.innerHTML = '<div class="empty">No completed charges yet.</div>';
+    return;
+  }
+
+  // Group into month sections, in the order sessions already arrive (desc).
+  const groups = [];
+  let currentKey = null, currentGroup = null;
+  allLoaded.forEach(s => {
+    const key = monthKey(s.started_at);
+    if (key !== currentKey) {
+      currentKey = key;
+      currentGroup = { key, sessions: [] };
+      groups.push(currentGroup);
+    }
+    currentGroup.sessions.push(s);
+  });
+
+  content.innerHTML = groups.map(g => `
+    <div class="month-header">${g.key}</div>
+    <div class="group-card">${g.sessions.map(sessionRow).join('')}</div>
+  `).join('');
+}
+
+async function loadMore() {
+  const btn = document.getElementById('load-more-btn');
+  btn.disabled = true;
+  btn.textContent = 'Loading…';
+  try {
+    const batch = await sb(`charging_sessions_detailed?ended_at=not.is.null&select=*&order=started_at.desc&limit=${PAGE_SIZE}&offset=${offset}`);
+    allLoaded = allLoaded.concat(batch);
+    offset += batch.length;
+    render();
+    btn.style.display = batch.length < PAGE_SIZE ? 'none' : 'block';
+  } catch (err) {
+    console.error(err);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Load More';
+  }
+}
+
+document.getElementById('load-more-btn').addEventListener('click', loadMore);
+loadMore();
+</script>
+</body>
+</html>
