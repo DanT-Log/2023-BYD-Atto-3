@@ -293,6 +293,12 @@
   }
 
   .location-card{ padding: 14px 16px; }
+  .location-pin-locked{ background: var(--text-secondary); }
+  .location-unlock-btn{
+    margin-top: 12px;
+    padding: 9px 18px;
+    font-size: 14px;
+  }
   .location-row{ display: flex; align-items: center; gap: 12px; }
   .location-pin{
     width: 34px; height: 34px;
@@ -648,7 +654,16 @@
 
       <div class="group">
         <div class="group-header">Location</div>
-        <div class="group-card location-card">
+        <div class="group-card location-card" id="location-locked">
+          <div class="location-row">
+            <div class="location-pin location-pin-locked">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+            </div>
+            <div class="location-text">Hidden until unlocked</div>
+          </div>
+          <button class="settings-unlock-btn location-unlock-btn" id="location-unlock-btn">Enter Passkey</button>
+        </div>
+        <div class="group-card location-card" id="location-unlocked" style="display:none;">
           <div class="location-row">
             <div class="location-pin">
               <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.1 7-11.5A7 7 0 0 0 5 9.5C5 14.9 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.3"/></svg>
@@ -1409,6 +1424,7 @@ async function loadEfficiency() {
 }
 
 async function loadLocationCard() {
+  if (!appUnlocked) return; // stays on the locked placeholder until unlocked
   const el = document.getElementById('location-text');
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/car-location`);
@@ -1418,6 +1434,12 @@ async function loadLocationCard() {
     el.textContent = "Couldn't load location right now.";
     console.error('location card failed', err);
   }
+}
+
+async function revealLocation() {
+  document.getElementById('location-locked').style.display = 'none';
+  document.getElementById('location-unlocked').style.display = 'block';
+  await loadLocationCard();
 }
 
 function renderLastChargeCard(mostRecent) {
@@ -1568,7 +1590,7 @@ pollNowBtn.addEventListener('click', async () => {
   await doPollNow(passkey);
 });
 
-let settingsUnlocked = false; // resets on page reload -- deliberately re-locks each fresh visit
+let appUnlocked = false; // resets on page reload -- deliberately re-locks each fresh visit
 
 async function verifyPasskeyServer(passkey) {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/verify-passkey`, {
@@ -1579,24 +1601,30 @@ async function verifyPasskeyServer(passkey) {
   return res.ok;
 }
 
-async function unlockSettings() {
+// Shared unlock: revealing Settings or Location (whichever the person
+// triggered it from) also reveals the other, since both are gated by
+// the same underlying passkey -- one unlock per session, not per-feature.
+async function unlockApp() {
+  if (appUnlocked) return true;
+
   let passkey = await getPasskey();
-  if (!passkey) return;
+  if (!passkey) return false;
 
   let ok = await verifyPasskeyServer(passkey);
   if (!ok) {
     clearStoredPasskey();
     const retryKey = await getPasskey('Incorrect passkey \u2014 try again.');
-    if (!retryKey) return;
+    if (!retryKey) return false;
     ok = await verifyPasskeyServer(retryKey);
-    if (!ok) { clearStoredPasskey(); return; }
-    passkey = retryKey;
+    if (!ok) { clearStoredPasskey(); return false; }
   }
 
-  settingsUnlocked = true;
+  appUnlocked = true;
   await populateSettingsForm();
   document.getElementById('settings-locked').style.display = 'none';
   document.getElementById('settings-form').style.display = 'block';
+  await revealLocation();
+  return true;
 }
 
 async function populateSettingsForm() {
@@ -1610,7 +1638,8 @@ async function populateSettingsForm() {
   document.getElementById('s-petrol-consumption').value = s.petrol_l_per_100km ?? '';
 }
 
-document.getElementById('settings-unlock-btn').addEventListener('click', unlockSettings);
+document.getElementById('settings-unlock-btn').addEventListener('click', unlockApp);
+document.getElementById('location-unlock-btn').addEventListener('click', unlockApp);
 
 document.getElementById('settings-save-btn').addEventListener('click', async () => {
   const status = document.getElementById('settings-status');
