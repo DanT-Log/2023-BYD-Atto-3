@@ -112,9 +112,18 @@ def parse_ts(s: str) -> datetime:
 
 def integrate_energy_kwh(session_start: str, session_end: str) -> float | None:
     """Trapezoidal integration of charging_power_kw across every snapshot
-    taken between session_start and session_end (inclusive). Returns None
-    if fewer than two usable power readings exist, so the caller can fall
-    back to the %-based estimate.
+    taken between session_start and session_end. Returns None if fewer
+    than two usable power readings exist, so the caller can fall back to
+    the %-based estimate.
+
+    The final snapshot in a session (the one that detected charging had
+    stopped) always has charging_power_kw = null by definition — the car
+    wasn't charging anymore when it was taken. Rather than dropping that
+    trailing gap entirely (which silently loses however long it had been
+    since the last real reading), the last known charging power is held
+    flat through to session_end. This assumes power stayed roughly level
+    right up to disconnect, which is the best available estimate without
+    a real reading in that window.
     """
     snapshots = sb_get(
         "vehicle_snapshots",
@@ -136,6 +145,15 @@ def integrate_energy_kwh(session_start: str, session_end: str) -> float | None:
             continue
         p0, p1 = float(prev["charging_power_kw"]), float(curr["charging_power_kw"])
         total_kwh += (p0 + p1) / 2.0 * hours
+
+    # Hold the last known power flat from the final real reading to the
+    # actual session end, instead of dropping that trailing gap.
+    last_reading_t = parse_ts(usable[-1]["recorded_at"])
+    end_t = parse_ts(session_end)
+    trailing_hours = (end_t - last_reading_t).total_seconds() / 3600.0
+    if trailing_hours > 0:
+        total_kwh += float(usable[-1]["charging_power_kw"]) * trailing_hours
+
     return total_kwh
 
 
