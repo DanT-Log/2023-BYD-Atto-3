@@ -508,7 +508,27 @@ function integrateEnergySoFar(snapshots) {
   return total;
 }
 
-function renderChargingStatus(session, energyKwh, costSoFar, fullByLabel) {
+function fmtFullByDate(target) {
+  const now = new Date();
+  const isToday = target.toDateString() === now.toDateString();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  const isTomorrow = target.toDateString() === tomorrow.toDateString();
+  const timeStr = target.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' });
+  if (isToday) return `Today, ${timeStr}`;
+  if (isTomorrow) return `Tomorrow, ${timeStr}`;
+  return `${target.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}, ${timeStr}`;
+}
+
+function fmtRemaining(target) {
+  const ms = target - new Date();
+  if (ms <= 0) return 'Any moment';
+  const totalMin = Math.round(ms / 60000);
+  const h = Math.floor(totalMin / 60), m = totalMin % 60;
+  return h === 0 ? `${m} min` : `${h}h ${m}min`;
+}
+
+function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget) {
   const card = document.getElementById('status-card');
   card.classList.add('charging');
   const isHome = session.location_type === 'home';
@@ -522,7 +542,10 @@ function renderChargingStatus(session, energyKwh, costSoFar, fullByLabel) {
     <div class="status-stat"><div class="k">Elapsed</div><div class="v">${fmtElapsed(session.started_at)}</div></div>
     <div class="status-stat"><div class="k">Energy so far</div><div class="v">${fmtKwh(energyKwh)}</div></div>
     <div class="status-stat"><div class="k">Cost so far</div><div class="v">${fmtMoney(costSoFar)}</div></div>
-    ${fullByLabel ? `<div class="status-stat status-full-width"><div class="k">Estimated full by</div><div class="v">${fullByLabel}</div></div>` : ''}
+    ${fullByTarget ? `
+      <div class="status-stat"><div class="k">Estimated full by</div><div class="v">${fmtFullByDate(fullByTarget)}</div></div>
+      <div class="status-stat"><div class="k">Time remaining</div><div class="v">${fmtRemaining(fullByTarget)}</div></div>
+    ` : ''}
   `;
 }
 
@@ -547,7 +570,7 @@ async function loadLiveStatus() {
     if (openSessions.length > 0) {
       const session = openSessions[0];
       const [snapshots, settingsRows] = await Promise.all([
-        sb(`vehicle_snapshots?recorded_at=gte.${encodeURIComponent(session.started_at)}&select=recorded_at,charging_power_kw,full_hour,full_minute&order=recorded_at.asc`),
+        sb(`vehicle_snapshots?recorded_at=gte.${encodeURIComponent(session.started_at)}&select=recorded_at,charging_power_kw,remaining_hours,remaining_minutes&order=recorded_at.asc`),
         sb('tracker_settings?select=*'),
       ]);
       const settings = settingsRows[0] || {};
@@ -555,16 +578,19 @@ async function loadLiveStatus() {
       const rate = session.location_type === 'home' ? settings.home_rate_per_kwh : settings.public_rate_per_kwh;
       const costSoFar = (energyKwh != null && rate != null) ? energyKwh * rate : null;
 
-      // Most recent snapshot with a real full_hour/full_minute reading, if any.
-      const withFullTime = [...snapshots].reverse().find(s => s.full_hour != null && s.full_minute != null);
-      let fullByLabel = null;
-      if (withFullTime) {
-        const d = new Date();
-        d.setHours(withFullTime.full_hour, withFullTime.full_minute, 0, 0);
-        fullByLabel = d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' });
+      // Use the most recent snapshot with a real countdown reading. The
+      // target is (that snapshot's own timestamp) + (duration reported at
+      // that moment) -- anchoring to the reading's own timestamp, not
+      // "now", means it lands on the correct date even if the remaining
+      // time spans past midnight, with no guessing.
+      const withRemaining = [...snapshots].reverse().find(s => s.remaining_hours != null && s.remaining_minutes != null);
+      let fullByTarget = null;
+      if (withRemaining) {
+        const anchor = new Date(withRemaining.recorded_at);
+        fullByTarget = new Date(anchor.getTime() + (withRemaining.remaining_hours * 60 + withRemaining.remaining_minutes) * 60000);
       }
 
-      renderChargingStatus(session, energyKwh, costSoFar, fullByLabel);
+      renderChargingStatus(session, energyKwh, costSoFar, fullByTarget);
     } else {
       const latest = await sb('vehicle_snapshots?select=battery_pct,range_km,recorded_at&order=recorded_at.desc&limit=1');
       renderIdleStatus(latest[0] || null);
