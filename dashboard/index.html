@@ -230,6 +230,39 @@
   .session-amt .place{ font-size: 12px; color: var(--text-secondary); margin-top: 1px; }
   .session-amt .place.unconfirmed{ color: var(--orange); }
 
+  .chart-card{
+    background: var(--card);
+    border-radius: 14px;
+    box-shadow: var(--card-shadow);
+    padding: 16px 16px 8px;
+  }
+  .chart-month-label{
+    font-size: 10.5px;
+    fill: var(--text-secondary);
+    font-family: -apple-system, sans-serif;
+  }
+
+  .fun-group{ margin-top: 32px; }
+  .fun-card{
+    padding: 18px 18px 16px;
+    background: linear-gradient(160deg, #2C1F0A 0%, #4A2E0A 100%);
+  }
+  @media (prefers-color-scheme: light){
+    .fun-card{ background: linear-gradient(160deg, #FFF6E5 0%, #FFE9C2 100%); }
+  }
+  .fun-line{
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--text);
+  }
+  .fun-line b{ font-variant-numeric: tabular-nums; }
+  .fun-note{
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 10px;
+    line-height: 1.4;
+  }
+
   .empty{
     padding: 28px 16px;
     text-align: center;
@@ -420,6 +453,13 @@
     </div>
 
     <div class="group">
+      <div class="group-header">Monthly Spend</div>
+      <div class="chart-card">
+        <svg id="monthly-chart" width="100%" height="120" viewBox="0 0 860 120" preserveAspectRatio="none"></svg>
+      </div>
+    </div>
+
+    <div class="group">
       <div class="group-header">Efficiency</div>
       <div class="group-card">
         <div class="row"><span class="k">Your tracked efficiency</span><span class="v" id="tracked-efficiency">—</span></div>
@@ -433,6 +473,11 @@
     </div>
 
     <div class="footnote">Updates automatically as the car reports new data. Tap a charge for full details.</div>
+
+    <div class="group fun-group">
+      <div class="group-header">Just For Fun</div>
+      <div class="group-card fun-card" id="petrol-fun"></div>
+    </div>
   </div>
 
 <script>
@@ -699,6 +744,69 @@ function computeTrackedEfficiency(sessions) {
   return totalKm > 0 ? (totalKwh / totalKm) * 100 : null;
 }
 
+function renderMonthlyChart(sessions) {
+  const svg = document.getElementById('monthly-chart');
+  const byMonth = {};
+  sessions.forEach(s => {
+    if (s.cost == null) return;
+    const d = new Date(s.started_at);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    byMonth[key] = (byMonth[key] || 0) + Number(s.cost);
+  });
+
+  const keys = Object.keys(byMonth).sort().slice(-6); // last 6 months with data
+  if (keys.length === 0) { svg.innerHTML = ''; return; }
+
+  const w = 860, h = 120, padBottom = 20, padTop = 8;
+  const barGap = 14;
+  const barWidth = (w - barGap * (keys.length + 1)) / keys.length;
+  const max = Math.max(...keys.map(k => byMonth[k]), 1);
+  const accent = window.matchMedia('(prefers-color-scheme: dark)').matches ? '#30D158' : '#34C759';
+
+  const bars = keys.map((k, i) => {
+    const value = byMonth[k];
+    const barH = ((h - padTop - padBottom) * value) / max;
+    const x = barGap + i * (barWidth + barGap);
+    const y = h - padBottom - barH;
+    const monthLabel = new Date(`${k}-01`).toLocaleDateString('en-AU', { month: 'short' });
+    return `
+      <rect x="${x}" y="${y}" width="${barWidth}" height="${Math.max(barH, 2)}" rx="4" fill="${accent}"/>
+      <text x="${x + barWidth / 2}" y="${h - 4}" text-anchor="middle" class="chart-month-label">${monthLabel}</text>
+    `;
+  }).join('');
+
+  svg.innerHTML = bars;
+}
+
+async function renderPetrolFun(allDoneSessions) {
+  const el = document.getElementById('petrol-fun');
+  try {
+    const settingsRows = await sb('tracker_settings?select=*');
+    const settings = settingsRows[0] || {};
+    const totalKm = allDoneSessions.reduce((sum, s) => sum + (Number(s.km_since_last_charge) || 0), 0);
+    const totalSpent = allDoneSessions.reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
+
+    if (totalKm <= 0) {
+      el.innerHTML = '<div class="fun-line">Drive a bit more and I\'ll show you what you\'re saving vs petrol.</div>';
+      return;
+    }
+
+    const litresEquivalent = (totalKm / 100) * settings.petrol_l_per_100km;
+    const petrolCost = litresEquivalent * settings.petrol_price_per_l;
+    const savings = petrolCost - totalSpent;
+    const co2Kg = litresEquivalent * 2.31; // kg CO2 per litre of petrol, standard factor
+
+    el.innerHTML = `
+      <div class="fun-line">Over <b>${totalKm.toFixed(0)} km</b> tracked, an equivalent petrol car would've cost about <b>${fmtMoney(petrolCost)}</b> to run.</div>
+      <div class="fun-line" style="margin-top:8px;">You spent <b>${fmtMoney(totalSpent)}</b> instead \u2014 roughly <b>${fmtMoney(savings)}</b> saved, and about <b>${co2Kg.toFixed(0)} kg</b> of CO\u2082 avoided.</div>
+      <div class="fun-note">Assumes ${settings.petrol_l_per_100km} L/100km at ${fmtMoney(settings.petrol_price_per_l)}/L \u2014 a rough comparison, not precise accounting.</div>
+    `;
+  } catch (err) {
+    el.innerHTML = '';
+    console.error('petrol fun facts failed', err);
+  }
+}
+
 async function loadEfficiency() {
   try {
     const tracked = computeTrackedEfficiency(allSessions);
@@ -720,8 +828,10 @@ async function load() {
     allSessions = sessions.filter(s => s.ended_at);
     applyPeriod();
     renderSessions(sessions);
+    renderMonthlyChart(allSessions);
     await loadLiveStatus();
     await loadEfficiency();
+    await renderPetrolFun(allSessions);
   } catch (err) {
     document.getElementById('total-spent-sub').textContent = 'Failed to load — check back shortly';
     console.error(err);
