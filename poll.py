@@ -295,6 +295,14 @@ async def fetch_vehicle_state() -> dict:
             "charging_power_kw": charging_power_kw,
             "odometer_km": realtime.total_mileage,
             "range_km": realtime.ev_endurance,
+            # Time-to-full comes from the dedicated charging endpoint (ChargingStatus),
+            # not the general realtime blob -- the latter's equivalent field is
+            # frequently unset (pyBYD nulls out BYD's -1 "not applicable" sentinel).
+            "full_hour": charging.full_hour,
+            "full_minute": charging.full_minute,
+            # Car's own reported lifetime average efficiency, for comparison against
+            # our independently tracked figure (energy added vs km driven).
+            "car_reported_kwh_per_100km": realtime.total_consumption_ev,
             "latitude": latitude,
             "longitude": longitude,
             "raw": {
