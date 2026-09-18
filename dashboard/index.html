@@ -225,6 +225,54 @@
     font-size: 14.5px;
   }
 
+  /* Live status card, above the hero */
+  .status-card{
+    background: var(--card);
+    border-radius: 16px;
+    box-shadow: var(--card-shadow);
+    padding: 14px 16px;
+    margin-bottom: 14px;
+  }
+  .status-top{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .status-dot{
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+    flex-shrink: 0;
+  }
+  .status-card.charging .status-dot{
+    background: var(--green);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse{
+    0%, 100%{ box-shadow: 0 0 0 0 rgba(52,199,89,0.45); }
+    50%{ box-shadow: 0 0 0 6px rgba(52,199,89,0); }
+  }
+  .status-title{ font-size: 15.5px; font-weight: 590; }
+  .status-idle-detail{
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+    margin-left: 17px;
+  }
+  .status-grid{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 12px;
+    margin-top: 12px;
+  }
+  .status-stat .k{ font-size: 12px; color: var(--text-secondary); }
+  .status-stat .v{
+    font-size: 17px;
+    font-weight: 590;
+    font-variant-numeric: tabular-nums;
+    margin-top: 1px;
+  }
+
   .footnote{
     margin-top: 24px;
     padding: 0 16px;
@@ -244,6 +292,15 @@
           <path d="M21 4v5h-5"/>
         </svg>
       </button>
+    </div>
+
+    <div class="status-card" id="status-card">
+      <div class="status-top">
+        <div class="status-dot"></div>
+        <div class="status-title" id="status-title">Loading…</div>
+      </div>
+      <div class="status-idle-detail" id="status-idle-detail"></div>
+      <div class="status-grid" id="status-grid" style="display:none;"></div>
     </div>
 
     <div class="hero">
@@ -382,12 +439,103 @@ function renderSessions(sessions) {
   }).join('');
 }
 
+function relativeTime(iso) {
+  const diffMin = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (diffMin < 1) return 'just now';
+  if (diffMin === 1) return '1 min ago';
+  if (diffMin < 60) return `${diffMin} min ago`;
+  const diffH = Math.round(diffMin / 60);
+  return diffH === 1 ? '1 hour ago' : `${diffH} hours ago`;
+}
+
+function fmtElapsed(startIso) {
+  const totalMin = Math.max(0, Math.round((Date.now() - new Date(startIso).getTime()) / 60000));
+  const h = Math.floor(totalMin / 60), m = totalMin % 60;
+  return h === 0 ? `${m} min` : `${h}h ${m}min`;
+}
+
+// Mirrors poll.py's integrate_energy_kwh: trapezoidal between real readings,
+// then holds the last known power flat through to "now".
+function integrateEnergySoFar(snapshots) {
+  const usable = snapshots.filter(s => s.charging_power_kw != null);
+  if (usable.length === 0) return null;
+
+  let total = 0;
+  for (let i = 0; i < usable.length - 1; i++) {
+    const t0 = new Date(usable[i].recorded_at), t1 = new Date(usable[i + 1].recorded_at);
+    const hours = (t1 - t0) / 3600000;
+    if (hours <= 0) continue;
+    const p0 = Number(usable[i].charging_power_kw), p1 = Number(usable[i + 1].charging_power_kw);
+    total += (p0 + p1) / 2 * hours;
+  }
+  const last = usable[usable.length - 1];
+  const trailingHours = (Date.now() - new Date(last.recorded_at).getTime()) / 3600000;
+  if (trailingHours > 0) total += Number(last.charging_power_kw) * trailingHours;
+  return total;
+}
+
+function renderChargingStatus(session, energyKwh, costSoFar) {
+  const card = document.getElementById('status-card');
+  card.classList.add('charging');
+  const isHome = session.location_type === 'home';
+  document.getElementById('status-title').textContent = `Charging \u2014 ${isHome ? 'Home' : 'Public Charger'}`;
+  document.getElementById('status-idle-detail').textContent = '';
+
+  const grid = document.getElementById('status-grid');
+  grid.style.display = 'grid';
+  grid.innerHTML = `
+    <div class="status-stat"><div class="k">Started</div><div class="v">${fmtTime(session.started_at)}</div></div>
+    <div class="status-stat"><div class="k">Elapsed</div><div class="v">${fmtElapsed(session.started_at)}</div></div>
+    <div class="status-stat"><div class="k">Energy so far</div><div class="v">${fmtKwh(energyKwh)}</div></div>
+    <div class="status-stat"><div class="k">Cost so far</div><div class="v">${fmtMoney(costSoFar)}</div></div>
+  `;
+}
+
+function renderIdleStatus(snapshot) {
+  const card = document.getElementById('status-card');
+  card.classList.remove('charging');
+  document.getElementById('status-grid').style.display = 'none';
+
+  if (!snapshot) {
+    document.getElementById('status-title').textContent = 'Not charging';
+    document.getElementById('status-idle-detail').textContent = '';
+    return;
+  }
+  document.getElementById('status-title').textContent = `Not charging \u2014 ${Math.round(snapshot.battery_pct)}% battery`;
+  const rangeStr = snapshot.range_km != null ? `${Math.round(snapshot.range_km)} km range \u00b7 ` : '';
+  document.getElementById('status-idle-detail').textContent = `${rangeStr}Updated ${relativeTime(snapshot.recorded_at)}`;
+}
+
+async function loadLiveStatus() {
+  try {
+    const openSessions = await sb('charging_sessions?ended_at=is.null&select=*&order=started_at.desc&limit=1');
+    if (openSessions.length > 0) {
+      const session = openSessions[0];
+      const [snapshots, settingsRows] = await Promise.all([
+        sb(`vehicle_snapshots?recorded_at=gte.${encodeURIComponent(session.started_at)}&select=recorded_at,charging_power_kw&order=recorded_at.asc`),
+        sb('tracker_settings?select=*'),
+      ]);
+      const settings = settingsRows[0] || {};
+      const energyKwh = integrateEnergySoFar(snapshots);
+      const rate = session.location_type === 'home' ? settings.home_rate_per_kwh : settings.public_rate_per_kwh;
+      const costSoFar = (energyKwh != null && rate != null) ? energyKwh * rate : null;
+      renderChargingStatus(session, energyKwh, costSoFar);
+    } else {
+      const latest = await sb('vehicle_snapshots?select=battery_pct,range_km,recorded_at&order=recorded_at.desc&limit=1');
+      renderIdleStatus(latest[0] || null);
+    }
+  } catch (err) {
+    console.error('live status failed', err);
+  }
+}
+
 async function load() {
   try {
     const sessions = await sb('charging_sessions_detailed?select=*&order=started_at.desc&limit=100');
     allSessions = sessions.filter(s => s.ended_at);
     applyPeriod();
     renderSessions(sessions);
+    await loadLiveStatus();
   } catch (err) {
     document.getElementById('total-spent-sub').textContent = 'Failed to load — check back shortly';
     console.error(err);
@@ -410,6 +558,7 @@ refreshBtn.addEventListener('click', async () => {
 });
 
 load();
+setInterval(load, 60000);
 </script>
 </body>
 </html>
