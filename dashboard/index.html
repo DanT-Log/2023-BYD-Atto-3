@@ -528,11 +528,12 @@ function fmtRemaining(target) {
   return h === 0 ? `${m} min` : `${h}h ${m}min`;
 }
 
-function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget) {
+function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, batteryPct) {
   const card = document.getElementById('status-card');
   card.classList.add('charging');
   const isHome = session.location_type === 'home';
-  document.getElementById('status-title').textContent = `Charging \u2014 ${isHome ? 'Home' : 'Public Charger'}`;
+  const pctStr = batteryPct != null ? `, ${Math.round(batteryPct)}%` : '';
+  document.getElementById('status-title').textContent = `Charging \u2014 ${isHome ? 'Home' : 'Public Charger'}${pctStr}`;
   document.getElementById('status-idle-detail').textContent = '';
 
   const grid = document.getElementById('status-grid');
@@ -570,7 +571,7 @@ async function loadLiveStatus() {
     if (openSessions.length > 0) {
       const session = openSessions[0];
       const [snapshots, settingsRows] = await Promise.all([
-        sb(`vehicle_snapshots?recorded_at=gte.${encodeURIComponent(session.started_at)}&select=recorded_at,charging_power_kw,remaining_hours,remaining_minutes,full_hour,full_minute&order=recorded_at.asc`),
+        sb(`vehicle_snapshots?recorded_at=gte.${encodeURIComponent(session.started_at)}&select=recorded_at,charging_power_kw,battery_pct,remaining_hours,remaining_minutes,full_hour,full_minute&order=recorded_at.asc`),
         sb('tracker_settings?select=*'),
       ]);
       const settings = settingsRows[0] || {};
@@ -602,7 +603,8 @@ async function loadLiveStatus() {
         fullByTarget = target;
       }
 
-      renderChargingStatus(session, energyKwh, costSoFar, fullByTarget);
+      const latestPct = [...snapshots].reverse().find(s => s.battery_pct != null)?.battery_pct;
+      renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, latestPct);
     } else {
       const latest = await sb('vehicle_snapshots?select=battery_pct,range_km,recorded_at&order=recorded_at.desc&limit=1');
       renderIdleStatus(latest[0] || null);
