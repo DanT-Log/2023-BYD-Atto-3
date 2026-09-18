@@ -658,7 +658,7 @@ function fmtRemaining(target) {
   return h === 0 ? `${m} min` : `${h}h ${m}min`;
 }
 
-function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, batteryPct, lastUpdated) {
+function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, batteryPct, lastUpdated, currentPowerKw) {
   const card = document.getElementById('status-card');
   card.classList.add('charging');
   const isHome = session.location_type === 'home';
@@ -670,6 +670,7 @@ function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, batte
   grid.style.display = 'grid';
   grid.innerHTML = `
     <div class="status-stat"><div class="k">Started</div><div class="v">${fmtTime(session.started_at)}</div></div>
+    <div class="status-stat"><div class="k">Charging speed</div><div class="v">${currentPowerKw != null ? `${currentPowerKw.toFixed(1)} kW` : '—'}</div></div>
     <div class="status-stat"><div class="k">Elapsed</div><div class="v">${fmtElapsed(session.started_at)}</div></div>
     <div class="status-stat"><div class="k">Energy so far</div><div class="v">${fmtKwh(energyKwh)}</div></div>
     <div class="status-stat"><div class="k">Cost so far</div><div class="v">${fmtMoney(costSoFar)}</div></div>
@@ -735,7 +736,8 @@ async function loadLiveStatus() {
 
       const latestPct = [...snapshots].reverse().find(s => s.battery_pct != null)?.battery_pct;
       const lastUpdated = snapshots.length ? snapshots[snapshots.length - 1].recorded_at : null;
-      renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, latestPct, lastUpdated);
+      const currentPowerKw = [...snapshots].reverse().find(s => s.charging_power_kw != null)?.charging_power_kw;
+      renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, latestPct, lastUpdated, currentPowerKw != null ? Number(currentPowerKw) : null);
     } else {
       const latest = await sb('vehicle_snapshots?select=battery_pct,range_km,recorded_at&order=recorded_at.desc&limit=1');
       renderIdleStatus(latest[0] || null);
