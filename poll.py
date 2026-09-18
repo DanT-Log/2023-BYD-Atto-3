@@ -36,6 +36,7 @@ Field notes (confirmed against pyBYD 0.0.75 source, not guessed):
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import re
 import sys
@@ -138,6 +139,27 @@ def integrate_energy_kwh(session_start: str, session_end: str) -> float | None:
     return total_kwh
 
 
+def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance between two lat/lon points, in metres."""
+    r = 6371000.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    d_phi = math.radians(lat2 - lat1)
+    d_lambda = math.radians(lon2 - lon1)
+    a = math.sin(d_phi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(d_lambda / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+def classify_location(lat: float | None, lon: float | None, settings: dict) -> str:
+    """Returns 'home', 'public', or 'unknown' based on distance from the
+    home coordinates stored in tracker_settings.
+    """
+    home_lat, home_lon = settings.get("home_latitude"), settings.get("home_longitude")
+    if lat is None or lon is None or home_lat is None or home_lon is None:
+        return "unknown"
+    distance = haversine_m(lat, lon, home_lat, home_lon)
+    return "home" if distance <= settings["home_radius_m"] else "public"
+
+
 def get_tracker_settings() -> dict:
     rows = sb_get("tracker_settings", {"select": "*"})
     if not rows:
@@ -214,15 +236,20 @@ def main() -> None:
     if not prev_is_charging and current_is_charging:
         existing_open = get_open_session()
         if existing_open is None:
+            settings = get_tracker_settings()
+            location_type = classify_location(state["latitude"], state["longitude"], settings)
             sb_insert(
                 "charging_sessions",
                 {
                     "started_at": now,
                     "start_pct": state["battery_pct"],
                     "start_odometer_km": state["odometer_km"],
+                    "start_latitude": state["latitude"],
+                    "start_longitude": state["longitude"],
+                    "location_type": location_type,
                 },
             )
-            print("charging session opened")
+            print(f"charging session opened ({location_type})")
         else:
             print("charging session already open, skipping open")
 
@@ -250,6 +277,14 @@ def main() -> None:
             if last_closed and last_closed.get("end_odometer_km") is not None and state["odometer_km"] is not None:
                 km_since_last_charge = open_session["start_odometer_km"] - last_closed["end_odometer_km"]
 
+            location_type = open_session.get("location_type") or "unknown"
+            if location_type == "home" and settings.get("home_rate_per_kwh") is not None:
+                electricity_rate = settings["home_rate_per_kwh"]
+            elif location_type == "public" and settings.get("public_rate_per_kwh") is not None:
+                electricity_rate = settings["public_rate_per_kwh"]
+            else:
+                electricity_rate = settings.get("home_rate_per_kwh")  # last-resort fallback
+
             sb_patch(
                 "charging_sessions",
                 open_session["id"],
@@ -258,13 +293,13 @@ def main() -> None:
                     "end_pct": end_pct,
                     "end_odometer_km": state["odometer_km"],
                     "energy_added_kwh": energy_added_kwh,
-                    "electricity_rate": settings["electricity_rate_per_kwh"],
+                    "electricity_rate": electricity_rate,
                     "km_since_last_charge": km_since_last_charge,
                 },
             )
             print(
                 f"charging session closed: {pct_delta}% added, "
-                f"{energy_added_kwh} kWh ({estimate_method})"
+                f"{energy_added_kwh} kWh @ {location_type} rate ({estimate_method})"
             )
 
 
