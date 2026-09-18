@@ -1013,8 +1013,11 @@ function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, batte
   const card = document.getElementById('status-card');
   card.classList.add('charging');
   const isHome = session.location_type === 'home';
+  const placeStr = appUnlocked ? (isHome ? 'Home' : 'Public Charger') : 'Charging';
   const pctStr = batteryPct != null ? `, ${Math.round(batteryPct)}%` : '';
-  document.getElementById('status-title').textContent = `Charging \u2014 ${isHome ? 'Home' : 'Public Charger'}${pctStr}`;
+  document.getElementById('status-title').textContent = appUnlocked
+    ? `Charging \u2014 ${placeStr}${pctStr}`
+    : `${placeStr}${pctStr}`;
   document.getElementById('status-idle-detail').textContent = lastUpdated ? `Updated ${relativeTime(lastUpdated)}` : '';
 
   const grid = document.getElementById('status-grid');
