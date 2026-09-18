@@ -68,14 +68,15 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin: 4px 2px 16px;
+    margin: 4px 2px 4px;
   }
   .title{
     font-size: 34px;
     font-weight: 700;
     letter-spacing: -0.021em;
   }
-  .refresh-btn{
+  .header-actions{ display: flex; gap: 10px; }
+  .icon-btn{
     width: 36px; height: 36px;
     border-radius: 50%;
     border: none;
@@ -89,9 +90,20 @@
     cursor: pointer;
     transition: background .15s ease, transform .15s ease;
   }
-  .refresh-btn:active{ background: var(--active-tint); transform: scale(0.92); }
-  .refresh-btn svg{ width: 18px; height: 18px; transition: transform .6s cubic-bezier(.2,.9,.3,1); }
-  .refresh-btn.spinning svg{ transform: rotate(360deg); }
+  .icon-btn:active{ background: var(--active-tint); transform: scale(0.92); }
+  .icon-btn svg{ width: 18px; height: 18px; transition: transform .6s cubic-bezier(.2,.9,.3,1); }
+  #refresh-btn.spinning svg{ transform: rotate(360deg); }
+  #poll-now-btn{ color: var(--orange); }
+  #poll-now-btn.polling{ animation: poll-pulse 1s ease-in-out infinite; }
+  @keyframes poll-pulse{ 0%,100%{ opacity: 1; } 50%{ opacity: 0.4; } }
+
+  .push-status{
+    font-size: 13px;
+    color: var(--text-secondary);
+    text-align: right;
+    margin: 0 2px 16px;
+    min-height: 16px;
+  }
 
   /* Hero: Wallet-pass style card */
   .hero{
@@ -312,13 +324,19 @@
   <div class="wrap">
     <div class="header-row">
       <div class="title">Atto 3</div>
-      <button class="refresh-btn" id="refresh-btn" aria-label="Refresh">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
-          <path d="M21 4v5h-5"/>
-        </svg>
-      </button>
+      <div class="header-actions">
+        <button class="icon-btn" id="poll-now-btn" aria-label="Poll now">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
+        </button>
+        <button class="icon-btn" id="refresh-btn" aria-label="Refresh">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
+            <path d="M21 4v5h-5"/>
+          </svg>
+        </button>
+      </div>
     </div>
+    <div class="push-status" id="push-status"></div>
 
     <div class="status-card" id="status-card">
       <div class="status-top">
@@ -672,6 +690,35 @@ refreshBtn.addEventListener('click', async () => {
   refreshBtn.classList.add('spinning');
   await load();
   setTimeout(() => refreshBtn.classList.remove('spinning'), 600);
+});
+
+const pollNowBtn = document.getElementById('poll-now-btn');
+const pushStatus = document.getElementById('push-status');
+const TRIGGER_URL = `${SUPABASE_URL}/functions/v1/trigger-poll`;
+
+pollNowBtn.addEventListener('click', async () => {
+  if (pollNowBtn.classList.contains('polling')) return;
+  pollNowBtn.classList.add('polling');
+  pushStatus.textContent = 'Polling the car now\u2026';
+  try {
+    const res = await fetch(TRIGGER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const data = await res.json();
+    if (!data.triggered) throw new Error('trigger failed');
+
+    // The GitHub Actions run itself takes ~15-20s to check out, install
+    // deps, and reach the car -- there's nothing to refresh yet the
+    // instant this call returns, so wait before pulling fresh data.
+    pushStatus.textContent = 'Waiting for the car to respond\u2026';
+    await new Promise(r => setTimeout(r, 20000));
+    await load();
+    pushStatus.textContent = `Updated ${new Date().toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}`;
+  } catch (err) {
+    pushStatus.textContent = 'Poll request failed \u2014 try again.';
+    console.error(err);
+  } finally {
+    pollNowBtn.classList.remove('polling');
+    setTimeout(() => { pushStatus.textContent = ''; }, 6000);
+  }
 });
 
 load();
