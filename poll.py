@@ -300,6 +300,13 @@ async def fetch_vehicle_state() -> dict:
             # frequently unset (pyBYD nulls out BYD's -1 "not applicable" sentinel).
             "full_hour": charging.full_hour,
             "full_minute": charging.full_minute,
+            # A genuine countdown duration (hours/minutes remaining until full),
+            # distinct from full_hour/full_minute above which is an ambiguous
+            # clock-time-of-day with no date attached. Combined with this
+            # snapshot's own timestamp, this gives an unambiguous target
+            # date+time with no guessing about which day it lands on.
+            "remaining_hours": realtime.remaining_hours,
+            "remaining_minutes": realtime.remaining_minutes,
             # Car's own reported lifetime average efficiency, for comparison against
             # our independently tracked figure (energy added vs km driven).
             "car_reported_kwh_per_100km": realtime.total_consumption_ev,
