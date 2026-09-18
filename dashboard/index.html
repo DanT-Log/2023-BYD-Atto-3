@@ -296,6 +296,31 @@
     line-height: 1.4;
   }
 
+  .location-card{ padding: 14px 16px; }
+  .location-row{ display: flex; align-items: center; gap: 12px; }
+  .location-pin{
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--blue);
+  }
+  .location-pin svg{ width: 17px; height: 17px; }
+  .location-text{ font-size: 15px; color: var(--text); line-height: 1.35; }
+
+  .last-charge-row{
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+  }
+  .last-charge-mid{ flex: 1; min-width: 0; }
+  .last-charge-title{ font-size: 15.5px; font-weight: 500; }
+  .last-charge-sub{ font-size: 13px; color: var(--text-secondary); margin-top: 1px; }
+  .last-charge-cost{ text-align: right; font-size: 17px; font-weight: 590; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
   .empty{
     padding: 28px 16px;
     text-align: center;
@@ -497,7 +522,28 @@
         <div class="status-grid" id="status-grid" style="display:none;"></div>
       </div>
 
-      <div class="hero">
+      <div class="group">
+        <div class="group-header">Location</div>
+        <div class="group-card location-card">
+          <div class="location-row">
+            <div class="location-pin">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.1 7-11.5A7 7 0 0 0 5 9.5C5 14.9 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.3"/></svg>
+            </div>
+            <div class="location-text" id="location-text">Loading…</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group-header">Last Charge</div>
+        <div class="group-card" id="last-charge-card">
+          <div class="empty">No charges recorded yet.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-panel" data-panel="stats" style="display:none;">
+      <div class="hero" style="margin-top:0;">
         <div class="hero-main">
           <div class="hero-label">Total spent charging</div>
           <div class="hero-amount" id="total-spent">$0.00</div>
@@ -511,10 +557,8 @@
           </div>
         </div>
       </div>
-    </div>
 
-    <div class="tab-panel" data-panel="stats" style="display:none;">
-      <div class="group" style="margin-top:0;">
+      <div class="group">
         <div class="group-header">Overview</div>
         <div class="segmented" id="period-tabs">
           <button data-period="daily">Daily</button>
@@ -962,13 +1006,46 @@ async function loadEfficiency() {
   }
 }
 
+async function loadLocationCard() {
+  const el = document.getElementById('location-text');
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/car-location`);
+    const text = await res.text();
+    el.textContent = text;
+  } catch (err) {
+    el.textContent = "Couldn't load location right now.";
+    console.error('location card failed', err);
+  }
+}
+
+function renderLastChargeCard(mostRecent) {
+  const el = document.getElementById('last-charge-card');
+  if (!mostRecent) {
+    el.innerHTML = '<div class="empty">No charges recorded yet.</div>';
+    return;
+  }
+  const isHome = mostRecent.location_type === 'home';
+  el.innerHTML = `
+    <a href="session.html?id=${mostRecent.id}" class="last-charge-row" style="text-decoration:none; color:inherit;">
+      <div class="avatar ${isHome ? '' : 'public'}">${isHome ? ICON_HOME : ICON_PUBLIC}</div>
+      <div class="last-charge-mid">
+        <div class="last-charge-title">${mostRecent.start_pct}% \u2192 ${mostRecent.end_pct}%</div>
+        <div class="last-charge-sub">${fmtDate(mostRecent.started_at)} \u00b7 ${fmtKwh(mostRecent.energy_added_kwh)} \u00b7 ${isHome ? 'Home' : 'Public Charger'}</div>
+      </div>
+      <div class="last-charge-cost">${fmtMoney(mostRecent.cost)}</div>
+    </a>
+  `;
+}
+
 async function load() {
   try {
     const sessions = await sb('charging_sessions_detailed?select=*&order=started_at.desc&limit=100');
     allSessions = sessions.filter(s => s.ended_at);
     applyPeriod();
     renderSessions(sessions);
+    renderLastChargeCard(allSessions[0]);
     await loadLiveStatus();
+    await loadLocationCard();
     await loadEfficiency();
     await renderPetrolFun(allSessions);
   } catch (err) {
