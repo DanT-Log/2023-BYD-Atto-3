@@ -6,7 +6,8 @@
 <title>Atto 3 — Charging Ledger</title>
 
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#14171c">
+<meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/icon-192.png" type="image/png">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -14,216 +15,239 @@
 <meta name="apple-mobile-web-app-title" content="Atto 3">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg: #14171c;
-    --panel: #1b2028;
-    --panel-2: #20262f;
-    --line: #2a3038;
-    --text: #ece9e2;
-    --muted: #8890a0;
-    --amber: #f2a65a;
-    --home: #47c2b1;
-    --public: #a48cf2;
-    --bad: #e0655c;
+    --bg: #F2F2F7;
+    --card: #FFFFFF;
+    --hairline: rgba(60,60,67,0.29);
+    --text: #1C1C1E;
+    --text-secondary: #8E8E93;
+    --green: #34C759;
+    --green-2: #30B855;
+    --blue: #007AFF;
+    --orange: #FF9500;
+    --card-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 8px 30px rgba(0,0,0,0.045);
+    --active-tint: rgba(60,60,67,0.06);
   }
-  * { box-sizing: border-box; }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg: #000000;
+      --card: #1C1C1E;
+      --hairline: rgba(84,84,88,0.6);
+      --text: #FFFFFF;
+      --text-secondary: #8E8E93;
+      --green: #30D158;
+      --green-2: #27B34C;
+      --blue: #0A84FF;
+      --orange: #FF9F0A;
+      --card-shadow: none;
+      --active-tint: rgba(255,255,255,0.06);
+    }
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; padding: 0; }
   body{
     background: var(--bg);
     color: var(--text);
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     min-height: 100vh;
   }
+
   .wrap{
-    max-width: 920px;
+    max-width: 480px;
     margin: 0 auto;
-    padding: max(48px, calc(env(safe-area-inset-top) + 24px)) 24px 96px;
-  }
-  .masthead{
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    margin-bottom: 40px;
-    border-bottom: 1px solid var(--line);
-    padding-bottom: 20px;
-  }
-  .masthead h1{
-    font-family: 'Space Grotesk', sans-serif;
-    font-weight: 600;
-    font-size: 20px;
-    margin: 0;
-    letter-spacing: -0.01em;
-  }
-  .masthead .vin{
-    color: var(--muted);
-    font-size: 13px;
+    padding: max(20px, calc(env(safe-area-inset-top) + 12px)) 16px calc(56px + env(safe-area-inset-bottom));
   }
 
-  .hero{
-    display: grid;
-    grid-template-columns: 1.4fr 1fr;
-    gap: 32px;
-    margin-bottom: 48px;
-  }
-  @media (max-width: 640px){ .hero{ grid-template-columns: 1fr; } }
-
-  .hero-figure{
-    position: relative;
-    padding: 28px 0 4px;
-    border-left: 3px solid var(--amber);
-    padding-left: 24px;
-  }
-  .hero-figure .label{
-    font-size: 13px;
-    color: var(--muted);
-    margin-bottom: 6px;
-  }
-  .hero-figure .number{
-    font-family: 'Space Grotesk', sans-serif;
+  .title{
+    font-size: 34px;
     font-weight: 700;
-    font-size: 56px;
-    line-height: 1;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.021em;
+    margin: 4px 2px 16px;
+  }
+
+  /* Hero: Wallet-pass style card */
+  .hero{
+    position: relative;
+    border-radius: 20px;
+    padding: 22px 22px 24px;
+    background: linear-gradient(150deg, var(--green) 0%, var(--green-2) 55%, #1F8F3E 100%);
+    color: #fff;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 16px 32px rgba(52,199,89,0.22);
     opacity: 0;
-    animation: rise .5s ease-out .1s forwards;
+    transform: translateY(6px) scale(0.99);
+    animation: hero-in .55s cubic-bezier(.2,.9,.3,1) .05s forwards;
   }
-  .hero-figure .sub{
-    margin-top: 10px;
-    color: var(--muted);
+  @keyframes hero-in{ to{ opacity: 1; transform: translateY(0) scale(1); } }
+  .hero::after{
+    content: "";
+    position: absolute;
+    top: -60%; right: -30%;
+    width: 70%; height: 200%;
+    background: radial-gradient(circle at center, rgba(255,255,255,0.16), transparent 60%);
+    pointer-events: none;
+  }
+  .hero-label{
     font-size: 13px;
-  }
-  @keyframes rise{
-    from{ opacity: 0; transform: translateY(6px); }
-    to{ opacity: 1; transform: translateY(0); }
-  }
-
-  .stat-stack{
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-  }
-  .stat-row{
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    padding: 14px 0;
-    border-bottom: 1px solid var(--line);
-  }
-  .stat-row:last-child{ border-bottom: none; }
-  .stat-row .k{ color: var(--muted); font-size: 13px; }
-  .stat-row .v{ font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 17px; }
-
-  .sparkline-panel{
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 20px 20px 12px;
-    margin-bottom: 48px;
-  }
-  .sparkline-panel .k{
-    color: var(--muted);
-    font-size: 13px;
-    margin-bottom: 10px;
-  }
-
-  .ledger h2{
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 15px;
     font-weight: 600;
-    color: var(--muted);
-    margin: 0 0 14px;
+    letter-spacing: -0.01em;
+    opacity: 0.85;
   }
-  .session{
-    display: grid;
-    grid-template-columns: 10px 88px 1fr auto;
+  .hero-amount{
+    font-size: 48px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .hero-sub{
+    font-size: 13px;
+    opacity: 0.85;
+    margin-top: 6px;
+  }
+
+  /* Grouped list, iOS Settings-style */
+  .group{ margin-top: 28px; }
+  .group-header{
+    font-size: 13px;
+    font-weight: 590;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    margin: 0 0 8px 16px;
+  }
+  .group-card{
+    background: var(--card);
+    border-radius: 14px;
+    box-shadow: var(--card-shadow);
+    overflow: hidden;
+  }
+
+  .row{
+    display: flex;
     align-items: center;
-    gap: 16px;
-    padding: 14px 4px;
-    border-bottom: 1px solid var(--line);
+    gap: 12px;
+    padding: 12px 16px;
+    min-height: 46px;
+    border-bottom: 0.5px solid var(--hairline);
   }
-  .session:first-child{ border-top: 1px solid var(--line); }
-  .dot{
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--home);
+  .row:last-child{ border-bottom: none; }
+  .row .k{ font-size: 15.5px; color: var(--text); flex: 1; }
+  .row .v{
+    font-size: 15.5px;
+    font-weight: 590;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
   }
-  .dot.public{ background: var(--public); }
-  .sdate{ color: var(--muted); font-size: 13px; }
-  .smid{ display: flex; flex-direction: column; gap: 2px; }
-  .spct{ font-size: 14px; }
-  .smeta{ color: var(--muted); font-size: 12.5px; }
-  .scost{
-    text-align: right;
-    font-family: 'Space Grotesk', sans-serif;
-    font-weight: 600;
-    font-size: 16px;
+
+  /* Session rows, Wallet-transaction style */
+  .session{
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 0.5px solid var(--hairline);
+    transition: background .15s ease;
   }
-  .scost .rate{
-    display: block;
-    font-family: 'Inter', sans-serif;
-    font-weight: 400;
-    font-size: 11.5px;
-    color: var(--muted);
-    margin-top: 2px;
+  .session:last-child{ border-bottom: none; }
+  .session:active{ background: var(--active-tint); }
+
+  .avatar{
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--green);
   }
-  .unconfirmed{ color: var(--bad); }
+  .avatar.public{ background: var(--blue); }
+  .avatar svg{ width: 17px; height: 17px; }
+
+  .session-mid{ flex: 1; min-width: 0; }
+  .session-title{ font-size: 15.5px; font-weight: 500; }
+  .session-sub{ font-size: 13px; color: var(--text-secondary); margin-top: 1px; }
+
+  .session-amt{ text-align: right; flex-shrink: 0; }
+  .session-amt .cost{
+    font-size: 15.5px;
+    font-weight: 590;
+    font-variant-numeric: tabular-nums;
+  }
+  .session-amt .rate{
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 1px;
+  }
+  .session-amt .rate.unconfirmed{ color: var(--orange); font-weight: 590; }
+
+  .sparkline-card{
+    background: var(--card);
+    border-radius: 14px;
+    box-shadow: var(--card-shadow);
+    padding: 16px 16px 10px;
+  }
 
   .empty{
-    color: var(--muted);
-    font-size: 14px;
-    padding: 32px 0;
+    padding: 28px 16px;
     text-align: center;
-    border: 1px dashed var(--line);
-    border-radius: 10px;
+    color: var(--text-secondary);
+    font-size: 14.5px;
   }
+
   .footnote{
-    margin-top: 40px;
-    color: var(--muted);
-    font-size: 12px;
+    margin-top: 24px;
+    padding: 0 16px;
+    color: var(--text-secondary);
+    font-size: 12.5px;
+    line-height: 1.4;
   }
 </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="masthead">
-      <h1>Atto 3 — Charging Ledger</h1>
-      <div class="vin" id="vin-note">home 0.32/kWh · public 0.75/kWh default</div>
-    </div>
+    <div class="title">Atto 3</div>
 
     <div class="hero">
-      <div class="hero-figure">
-        <div class="label">Total spent charging</div>
-        <div class="number" id="total-spent">—</div>
-        <div class="sub" id="total-spent-sub">loading…</div>
+      <div class="hero-label">Total spent charging</div>
+      <div class="hero-amount" id="total-spent">$0.00</div>
+      <div class="hero-sub" id="total-spent-sub">loading…</div>
+    </div>
+
+    <div class="group">
+      <div class="group-header">Overview</div>
+      <div class="group-card">
+        <div class="row"><span class="k">Total energy added</span><span class="v" id="total-kwh">—</span></div>
+        <div class="row"><span class="k">Km tracked between charges</span><span class="v" id="total-km">—</span></div>
+        <div class="row"><span class="k">Avg cost / km</span><span class="v" id="avg-per-km">—</span></div>
+        <div class="row"><span class="k">Avg cost / kWh</span><span class="v" id="avg-per-kwh">—</span></div>
       </div>
-      <div class="stat-stack">
-        <div class="stat-row"><span class="k">Total energy added</span><span class="v" id="total-kwh">—</span></div>
-        <div class="stat-row"><span class="k">Km tracked between charges</span><span class="v" id="total-km">—</span></div>
-        <div class="stat-row"><span class="k">Avg cost / km</span><span class="v" id="avg-per-km">—</span></div>
-        <div class="stat-row"><span class="k">Avg cost / kWh</span><span class="v" id="avg-per-kwh">—</span></div>
+    </div>
+
+    <div class="group">
+      <div class="group-header">Cumulative Spend</div>
+      <div class="sparkline-card">
+        <svg id="spark" width="100%" height="64" viewBox="0 0 860 64" preserveAspectRatio="none"></svg>
       </div>
     </div>
 
-    <div class="sparkline-panel">
-      <div class="k">Cumulative spend</div>
-      <svg id="spark" width="100%" height="72" viewBox="0 0 860 72" preserveAspectRatio="none"></svg>
+    <div class="group">
+      <div class="group-header">Recent Charges</div>
+      <div class="group-card" id="sessions"></div>
     </div>
 
-    <div class="ledger">
-      <h2>Recent charges</h2>
-      <div id="sessions"></div>
-    </div>
-
-    <div class="footnote">Updates automatically as the car reports new data. Unconfirmed public rates are estimates until corrected.</div>
+    <div class="footnote">Updates automatically as the car reports new data. Rates marked in orange are defaults, not yet confirmed.</div>
   </div>
 
 <script>
 const SUPABASE_URL = "https://ujpcabmacpnbtyiharnk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_MYvAXGlFH-AyOkGU-FceYg_THPLZqCy";
+
+const ICON_HOME = `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H9a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h2.5a1 1 0 0 0 1-1v-9"/></svg>`;
+const ICON_PUBLIC = `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.1 7-11.5A7 7 0 0 0 5 9.5C5 14.9 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.3"/></svg>`;
 
 async function sb(path) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -242,13 +266,18 @@ const fmtKm = (n) => n == null ? "—" : `${Number(n).toFixed(0)} km`;
 const fmtDate = (iso) => new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
 
 function renderSummary(summary) {
-  document.getElementById('total-spent').textContent = fmtMoney(summary.total_spent);
+  document.getElementById('total-spent').textContent = fmtMoney(summary.total_spent ?? 0);
   document.getElementById('total-spent-sub').textContent =
-    summary.total_charges ? `across ${summary.total_charges} charge${summary.total_charges === 1 ? '' : 's'}` : 'no completed charges yet';
+    summary.total_charges ? `${summary.total_charges} charge${summary.total_charges === 1 ? '' : 's'} tracked` : 'No completed charges yet';
   document.getElementById('total-kwh').textContent = fmtKwh(summary.total_kwh);
   document.getElementById('total-km').textContent = fmtKm(summary.total_km_tracked);
   document.getElementById('avg-per-km').textContent = summary.avg_cost_per_km != null ? `${(summary.avg_cost_per_km * 100).toFixed(1)}¢` : '—';
   document.getElementById('avg-per-kwh').textContent = fmtMoney(summary.avg_cost_per_kwh);
+}
+
+function currentAccent() {
+  const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return dark ? '#30D158' : '#34C759';
 }
 
 function renderSpark(sessions) {
@@ -259,13 +288,13 @@ function renderSpark(sessions) {
   let running = 0;
   const points = done.map(s => { running += Number(s.cost); return running; });
   const max = Math.max(...points);
-  const min = 0;
-  const w = 860, h = 72, pad = 4;
+  const w = 860, h = 64, pad = 4;
   const step = (w - pad * 2) / (points.length - 1);
+  const accent = currentAccent();
 
   const coords = points.map((v, i) => {
     const x = pad + i * step;
-    const y = h - pad - ((v - min) / (max - min || 1)) * (h - pad * 2);
+    const y = h - pad - (v / (max || 1)) * (h - pad * 2);
     return [x, y];
   });
 
@@ -275,12 +304,12 @@ function renderSpark(sessions) {
   svg.innerHTML = `
     <defs>
       <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#f2a65a" stop-opacity="0.25"/>
-        <stop offset="100%" stop-color="#f2a65a" stop-opacity="0"/>
+        <stop offset="0%" stop-color="${accent}" stop-opacity="0.22"/>
+        <stop offset="100%" stop-color="${accent}" stop-opacity="0"/>
       </linearGradient>
     </defs>
     <path d="${area}" fill="url(#fade)" />
-    <path d="${path}" fill="none" stroke="#f2a65a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="${path}" fill="none" stroke="${accent}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
   `;
 }
 
@@ -295,18 +324,16 @@ function renderSessions(sessions) {
 
   el.innerHTML = done.map(s => {
     const isHome = s.location_type === 'home';
-    const pctDelta = (s.end_pct != null && s.start_pct != null) ? (s.end_pct - s.start_pct) : null;
     return `
       <div class="session">
-        <div class="dot ${isHome ? '' : 'public'}"></div>
-        <div class="sdate">${fmtDate(s.started_at)}</div>
-        <div class="smid">
-          <div class="spct">${pctDelta != null ? `${s.start_pct}% → ${s.end_pct}%` : '—'} · ${fmtKwh(s.energy_added_kwh)}</div>
-          <div class="smeta">${isHome ? 'Home' : 'Public'}${s.km_since_last_charge != null ? ` · ${fmtKm(s.km_since_last_charge)} since last charge` : ''}</div>
+        <div class="avatar ${isHome ? '' : 'public'}">${isHome ? ICON_HOME : ICON_PUBLIC}</div>
+        <div class="session-mid">
+          <div class="session-title">${s.start_pct != null && s.end_pct != null ? `${s.start_pct}% → ${s.end_pct}%` : fmtDate(s.started_at)}</div>
+          <div class="session-sub">${fmtDate(s.started_at)} · ${fmtKwh(s.energy_added_kwh)}${s.km_since_last_charge != null ? ` · ${fmtKm(s.km_since_last_charge)}` : ''}</div>
         </div>
-        <div class="scost">
-          ${fmtMoney(s.cost)}
-          <span class="rate ${s.rate_confirmed === false ? 'unconfirmed' : ''}">${s.rate_confirmed === false ? 'unconfirmed rate' : `${fmtMoney(s.electricity_rate)}/kWh`}</span>
+        <div class="session-amt">
+          <div class="cost">${fmtMoney(s.cost)}</div>
+          <div class="rate ${s.rate_confirmed === false ? 'unconfirmed' : ''}">${s.rate_confirmed === false ? 'unconfirmed' : `${fmtMoney(s.electricity_rate)}/kWh`}</div>
         </div>
       </div>
     `;
@@ -324,7 +351,7 @@ async function load() {
     renderSpark(sessions);
     renderSessions(sessions);
   } catch (err) {
-    document.getElementById('total-spent-sub').textContent = 'failed to load — check back shortly';
+    document.getElementById('total-spent-sub').textContent = 'Failed to load — check back shortly';
     console.error(err);
   }
 }
