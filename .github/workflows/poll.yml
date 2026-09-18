@@ -2,8 +2,8 @@ name: Poll BYD Atto 3
 
 on:
   schedule:
-    # Every 15 minutes. GitHub may delay scheduled runs slightly under load.
-    - cron: '*/15 * * * *'
+    # Every 5 minutes. GitHub may delay scheduled runs slightly under load.
+    - cron: '*/5 * * * *'
   workflow_dispatch: {}
 
 jobs:
