@@ -61,11 +61,41 @@
     padding: max(20px, calc(env(safe-area-inset-top) + 12px)) 16px calc(56px + env(safe-area-inset-bottom));
   }
 
+  .header-row{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 4px 2px 16px;
+  }
   .title{
     font-size: 34px;
     font-weight: 700;
     letter-spacing: -0.021em;
-    margin: 4px 2px 16px;
+  }
+  .refresh-btn{
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: var(--card);
+    box-shadow: var(--card-shadow);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--green);
+    padding: 0;
+    cursor: pointer;
+    transition: background .15s ease, transform .15s ease;
+  }
+  .refresh-btn:active{
+    background: var(--active-tint);
+    transform: scale(0.92);
+  }
+  .refresh-btn svg{
+    width: 18px; height: 18px;
+    transition: transform .6s cubic-bezier(.2,.9,.3,1);
+  }
+  .refresh-btn.spinning svg{
+    transform: rotate(360deg);
   }
 
   /* Hero: Wallet-pass style card */
@@ -209,7 +239,15 @@
 </head>
 <body>
   <div class="wrap">
-    <div class="title">Atto 3</div>
+    <div class="header-row">
+      <div class="title">Atto 3</div>
+      <button class="refresh-btn" id="refresh-btn" aria-label="Refresh">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
+          <path d="M21 4v5h-5"/>
+        </svg>
+      </button>
+    </div>
 
     <div class="hero">
       <div class="hero-label">Total spent charging</div>
@@ -355,6 +393,14 @@ async function load() {
     console.error(err);
   }
 }
+
+const refreshBtn = document.getElementById('refresh-btn');
+refreshBtn.addEventListener('click', async () => {
+  if (refreshBtn.classList.contains('spinning')) return;
+  refreshBtn.classList.add('spinning');
+  await load();
+  setTimeout(() => refreshBtn.classList.remove('spinning'), 600);
+});
 
 load();
 </script>
