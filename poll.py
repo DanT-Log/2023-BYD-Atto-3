@@ -160,6 +160,30 @@ def classify_location(lat: float | None, lon: float | None, settings: dict) -> s
     return "home" if distance <= settings["home_radius_m"] else "public"
 
 
+NTFY_TOPIC = os.environ.get("NTFY_TOPIC")
+
+
+def notify_public_charge_needs_rate(session_id: int, energy_kwh: float | None, default_cost: float | None) -> None:
+    if not NTFY_TOPIC:
+        return
+    energy_str = f"{energy_kwh:.1f} kWh" if energy_kwh is not None else "unknown energy"
+    cost_str = f"${default_cost:.2f}" if default_cost is not None else "unknown cost"
+    message = (
+        f"Public charge finished: {energy_str} added, estimated {cost_str} "
+        f"using the default rate. Session #{session_id} \u2014 reply to Claude to "
+        f"set the real rate if you know it."
+    )
+    try:
+        requests.post(
+            f"https://ntfy.sh/{NTFY_TOPIC}",
+            data=message.encode("utf-8"),
+            headers={"Title": "BYD Atto 3 \u2014 confirm public charge rate", "Priority": "default"},
+            timeout=10,
+        )
+    except Exception as exc:  # noqa: BLE001 - notification failure shouldn't break the poll
+        print(f"warning: ntfy notification failed: {exc}", file=sys.stderr)
+
+
 def get_tracker_settings() -> dict:
     rows = sb_get("tracker_settings", {"select": "*"})
     if not rows:
@@ -280,10 +304,13 @@ def main() -> None:
             location_type = open_session.get("location_type") or "unknown"
             if location_type == "home" and settings.get("home_rate_per_kwh") is not None:
                 electricity_rate = settings["home_rate_per_kwh"]
+                rate_confirmed = True
             elif location_type == "public" and settings.get("public_rate_per_kwh") is not None:
                 electricity_rate = settings["public_rate_per_kwh"]
+                rate_confirmed = False  # default estimate, not a confirmed real rate
             else:
                 electricity_rate = settings.get("home_rate_per_kwh")  # last-resort fallback
+                rate_confirmed = False
 
             sb_patch(
                 "charging_sessions",
@@ -295,12 +322,17 @@ def main() -> None:
                     "energy_added_kwh": energy_added_kwh,
                     "electricity_rate": electricity_rate,
                     "km_since_last_charge": km_since_last_charge,
+                    "rate_confirmed": rate_confirmed,
                 },
             )
             print(
                 f"charging session closed: {pct_delta}% added, "
                 f"{energy_added_kwh} kWh @ {location_type} rate ({estimate_method})"
             )
+
+            if location_type == "public" and energy_added_kwh is not None:
+                default_cost = energy_added_kwh * electricity_rate if electricity_rate is not None else None
+                notify_public_charge_needs_rate(open_session["id"], energy_added_kwh, default_cost)
 
 
 if __name__ == "__main__":

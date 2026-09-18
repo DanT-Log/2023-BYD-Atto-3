@@ -28,3 +28,4 @@ jobs:
           BYD_CONTROL_PIN: ${{ secrets.BYD_CONTROL_PIN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
