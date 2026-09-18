@@ -1,9 +1,12 @@
 name: Poll BYD Atto 3
 
 on:
-  schedule:
-    # Every 5 minutes. GitHub may delay scheduled runs slightly under load.
-    - cron: '*/5 * * * *'
+  # Triggered every 5 minutes by a Supabase pg_cron job calling the
+  # "trigger-poll" Edge Function, which hits this workflow_dispatch
+  # endpoint. GitHub's own native `schedule:` trigger is deliberately
+  # NOT used here -- it's documented as best-effort and was observed
+  # skipping ticks (a 23-minute gap during testing). Supabase's
+  # Postgres-level pg_cron is the reliable clock instead.
   workflow_dispatch: {}
 
 jobs:
