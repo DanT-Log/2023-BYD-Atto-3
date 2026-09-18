@@ -28,6 +28,7 @@
     --orange: #FF9500;
     --card-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 8px 30px rgba(0,0,0,0.045);
     --active-tint: rgba(60,60,67,0.06);
+    --segment-track: rgba(118,118,128,0.12);
   }
   @media (prefers-color-scheme: dark){
     :root{
@@ -42,11 +43,13 @@
       --orange: #FF9F0A;
       --card-shadow: none;
       --active-tint: rgba(255,255,255,0.06);
+      --segment-track: rgba(118,118,128,0.24);
     }
   }
 
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; padding: 0; }
+  a { text-decoration: none; color: inherit; }
   body{
     background: var(--bg);
     color: var(--text);
@@ -86,17 +89,9 @@
     cursor: pointer;
     transition: background .15s ease, transform .15s ease;
   }
-  .refresh-btn:active{
-    background: var(--active-tint);
-    transform: scale(0.92);
-  }
-  .refresh-btn svg{
-    width: 18px; height: 18px;
-    transition: transform .6s cubic-bezier(.2,.9,.3,1);
-  }
-  .refresh-btn.spinning svg{
-    transform: rotate(360deg);
-  }
+  .refresh-btn:active{ background: var(--active-tint); transform: scale(0.92); }
+  .refresh-btn svg{ width: 18px; height: 18px; transition: transform .6s cubic-bezier(.2,.9,.3,1); }
+  .refresh-btn.spinning svg{ transform: rotate(360deg); }
 
   /* Hero: Wallet-pass style card */
   .hero{
@@ -120,12 +115,7 @@
     background: radial-gradient(circle at center, rgba(255,255,255,0.16), transparent 60%);
     pointer-events: none;
   }
-  .hero-label{
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    opacity: 0.85;
-  }
+  .hero-label{ font-size: 13px; font-weight: 600; letter-spacing: -0.01em; opacity: 0.85; }
   .hero-amount{
     font-size: 48px;
     font-weight: 700;
@@ -133,14 +123,36 @@
     margin-top: 4px;
     font-variant-numeric: tabular-nums;
   }
-  .hero-sub{
+  .hero-sub{ font-size: 13px; opacity: 0.85; margin-top: 6px; }
+
+  /* Segmented control (Daily / Weekly / Monthly / All) */
+  .segmented{
+    display: flex;
+    background: var(--segment-track);
+    border-radius: 9px;
+    padding: 2px;
+    margin: 14px 0 14px;
+  }
+  .segmented button{
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 6px 4px;
+    font-family: inherit;
     font-size: 13px;
-    opacity: 0.85;
-    margin-top: 6px;
+    font-weight: 590;
+    color: var(--text);
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background .18s ease;
+  }
+  .segmented button.active{
+    background: var(--card);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
   }
 
   /* Grouped list, iOS Settings-style */
-  .group{ margin-top: 28px; }
+  .group{ margin-top: 24px; }
   .group-header{
     font-size: 13px;
     font-weight: 590;
@@ -202,24 +214,9 @@
   .session-sub{ font-size: 13px; color: var(--text-secondary); margin-top: 1px; }
 
   .session-amt{ text-align: right; flex-shrink: 0; }
-  .session-amt .cost{
-    font-size: 15.5px;
-    font-weight: 590;
-    font-variant-numeric: tabular-nums;
-  }
-  .session-amt .rate{
-    font-size: 12px;
-    color: var(--text-secondary);
-    margin-top: 1px;
-  }
-  .session-amt .rate.unconfirmed{ color: var(--orange); font-weight: 590; }
-
-  .sparkline-card{
-    background: var(--card);
-    border-radius: 14px;
-    box-shadow: var(--card-shadow);
-    padding: 16px 16px 10px;
-  }
+  .session-amt .cost{ font-size: 15.5px; font-weight: 590; font-variant-numeric: tabular-nums; }
+  .session-amt .place{ font-size: 12px; color: var(--text-secondary); margin-top: 1px; }
+  .session-amt .place.unconfirmed{ color: var(--orange); }
 
   .empty{
     padding: 28px 16px;
@@ -257,6 +254,12 @@
 
     <div class="group">
       <div class="group-header">Overview</div>
+      <div class="segmented" id="period-tabs">
+        <button data-period="daily">Daily</button>
+        <button data-period="weekly">Weekly</button>
+        <button data-period="monthly">Monthly</button>
+        <button data-period="all">All</button>
+      </div>
       <div class="group-card">
         <div class="row"><span class="k">Total energy added</span><span class="v" id="total-kwh">—</span></div>
         <div class="row"><span class="k">Km tracked between charges</span><span class="v" id="total-km">—</span></div>
@@ -266,18 +269,11 @@
     </div>
 
     <div class="group">
-      <div class="group-header">Cumulative Spend</div>
-      <div class="sparkline-card">
-        <svg id="spark" width="100%" height="64" viewBox="0 0 860 64" preserveAspectRatio="none"></svg>
-      </div>
-    </div>
-
-    <div class="group">
       <div class="group-header">Recent Charges</div>
       <div class="group-card" id="sessions"></div>
     </div>
 
-    <div class="footnote">Updates automatically as the car reports new data. Rates marked in orange are defaults, not yet confirmed.</div>
+    <div class="footnote">Updates automatically as the car reports new data. Tap a charge for full details.</div>
   </div>
 
 <script>
@@ -289,10 +285,7 @@ const ICON_PUBLIC = `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-w
 
 async function sb(path) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-    },
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
   });
   if (!res.ok) throw new Error(`Supabase fetch failed: ${res.status}`);
   return res.json();
@@ -302,53 +295,62 @@ const fmtMoney = (n) => n == null ? "—" : `$${Number(n).toFixed(2)}`;
 const fmtKwh = (n) => n == null ? "—" : `${Number(n).toFixed(1)} kWh`;
 const fmtKm = (n) => n == null ? "—" : `${Number(n).toFixed(0)} km`;
 const fmtDate = (iso) => new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+const fmtTime = (iso) => new Date(iso).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' });
+
+let allSessions = [];
+let activePeriod = 'weekly';
+
+function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+function startOfWeek(d) {
+  const x = startOfDay(d);
+  const day = x.getDay(); // 0 = Sun .. 6 = Sat
+  const diffToMonday = (day === 0 ? -6 : 1) - day;
+  x.setDate(x.getDate() + diffToMonday);
+  return x;
+}
+function startOfMonth(d) { const x = startOfDay(d); x.setDate(1); return x; }
+
+function periodStart(period) {
+  const now = new Date();
+  if (period === 'daily') return startOfDay(now);
+  if (period === 'weekly') return startOfWeek(now);
+  if (period === 'monthly') return startOfMonth(now);
+  return new Date(0); // all time
+}
+
+function computeSummary(sessions) {
+  const totalCharges = sessions.length;
+  const totalSpent = sessions.reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
+  const totalKwh = sessions.reduce((sum, s) => sum + (Number(s.energy_added_kwh) || 0), 0);
+  const totalKm = sessions.reduce((sum, s) => sum + (Number(s.km_since_last_charge) || 0), 0);
+  return {
+    total_charges: totalCharges,
+    total_spent: totalSpent,
+    total_kwh: totalKwh,
+    total_km_tracked: totalKm,
+    avg_cost_per_km: totalKm > 0 ? totalSpent / totalKm : null,
+    avg_cost_per_kwh: totalKwh > 0 ? totalSpent / totalKwh : null,
+  };
+}
 
 function renderSummary(summary) {
   document.getElementById('total-spent').textContent = fmtMoney(summary.total_spent ?? 0);
   document.getElementById('total-spent-sub').textContent =
-    summary.total_charges ? `${summary.total_charges} charge${summary.total_charges === 1 ? '' : 's'} tracked` : 'No completed charges yet';
+    summary.total_charges ? `${summary.total_charges} charge${summary.total_charges === 1 ? '' : 's'} this period` : 'No charges this period';
   document.getElementById('total-kwh').textContent = fmtKwh(summary.total_kwh);
   document.getElementById('total-km').textContent = fmtKm(summary.total_km_tracked);
   document.getElementById('avg-per-km').textContent = summary.avg_cost_per_km != null ? `${(summary.avg_cost_per_km * 100).toFixed(1)}¢` : '—';
   document.getElementById('avg-per-kwh').textContent = fmtMoney(summary.avg_cost_per_kwh);
 }
 
-function currentAccent() {
-  const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  return dark ? '#30D158' : '#34C759';
-}
+function applyPeriod() {
+  const since = periodStart(activePeriod);
+  const filtered = allSessions.filter(s => new Date(s.started_at) >= since);
+  renderSummary(computeSummary(filtered));
 
-function renderSpark(sessions) {
-  const svg = document.getElementById('spark');
-  const done = sessions.filter(s => s.cost != null).slice().reverse();
-  if (done.length < 2) { svg.innerHTML = ''; return; }
-
-  let running = 0;
-  const points = done.map(s => { running += Number(s.cost); return running; });
-  const max = Math.max(...points);
-  const w = 860, h = 64, pad = 4;
-  const step = (w - pad * 2) / (points.length - 1);
-  const accent = currentAccent();
-
-  const coords = points.map((v, i) => {
-    const x = pad + i * step;
-    const y = h - pad - (v / (max || 1)) * (h - pad * 2);
-    return [x, y];
+  document.querySelectorAll('#period-tabs button').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.period === activePeriod);
   });
-
-  const path = coords.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-  const area = `${path} L${coords[coords.length - 1][0].toFixed(1)},${h} L${coords[0][0].toFixed(1)},${h} Z`;
-
-  svg.innerHTML = `
-    <defs>
-      <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="${accent}" stop-opacity="0.22"/>
-        <stop offset="100%" stop-color="${accent}" stop-opacity="0"/>
-      </linearGradient>
-    </defs>
-    <path d="${area}" fill="url(#fade)" />
-    <path d="${path}" fill="none" stroke="${accent}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-  `;
 }
 
 function renderSessions(sessions) {
@@ -362,37 +364,42 @@ function renderSessions(sessions) {
 
   el.innerHTML = done.map(s => {
     const isHome = s.location_type === 'home';
+    const placeLabel = isHome ? 'Home' : 'Public Charger';
+    const timeRange = `${fmtTime(s.started_at)}–${fmtTime(s.ended_at)}`;
     return `
-      <div class="session">
+      <a class="session" href="session.html?id=${s.id}">
         <div class="avatar ${isHome ? '' : 'public'}">${isHome ? ICON_HOME : ICON_PUBLIC}</div>
         <div class="session-mid">
           <div class="session-title">${s.start_pct != null && s.end_pct != null ? `${s.start_pct}% → ${s.end_pct}%` : fmtDate(s.started_at)}</div>
-          <div class="session-sub">${fmtDate(s.started_at)} · ${fmtKwh(s.energy_added_kwh)}${s.km_since_last_charge != null ? ` · ${fmtKm(s.km_since_last_charge)}` : ''}</div>
+          <div class="session-sub">${fmtDate(s.started_at)}, ${timeRange} · ${fmtKwh(s.energy_added_kwh)}</div>
         </div>
         <div class="session-amt">
           <div class="cost">${fmtMoney(s.cost)}</div>
-          <div class="rate ${s.rate_confirmed === false ? 'unconfirmed' : ''}">${s.rate_confirmed === false ? 'unconfirmed' : `${fmtMoney(s.electricity_rate)}/kWh`}</div>
+          <div class="place ${s.rate_confirmed === false ? 'unconfirmed' : ''}">${placeLabel}</div>
         </div>
-      </div>
+      </a>
     `;
   }).join('');
 }
 
 async function load() {
   try {
-    const [summaryRows, sessions] = await Promise.all([
-      sb('charging_summary?select=*'),
-      sb('charging_sessions_detailed?select=*&order=started_at.desc&limit=50'),
-    ]);
-    const summary = summaryRows[0] || {};
-    renderSummary(summary);
-    renderSpark(sessions);
+    const sessions = await sb('charging_sessions_detailed?select=*&order=started_at.desc&limit=100');
+    allSessions = sessions.filter(s => s.ended_at);
+    applyPeriod();
     renderSessions(sessions);
   } catch (err) {
     document.getElementById('total-spent-sub').textContent = 'Failed to load — check back shortly';
     console.error(err);
   }
 }
+
+document.getElementById('period-tabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  activePeriod = btn.dataset.period;
+  applyPeriod();
+});
 
 const refreshBtn = document.getElementById('refresh-btn');
 refreshBtn.addEventListener('click', async () => {
