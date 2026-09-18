@@ -24,6 +24,7 @@ jobs:
           BYD_USERNAME: ${{ secrets.BYD_USERNAME }}
           BYD_PASSWORD: ${{ secrets.BYD_PASSWORD }}
           BYD_COUNTRY_CODE: ${{ secrets.BYD_COUNTRY_CODE }}
+          BYD_BASE_URL: ${{ secrets.BYD_BASE_URL }}
           BYD_CONTROL_PIN: ${{ secrets.BYD_CONTROL_PIN }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
