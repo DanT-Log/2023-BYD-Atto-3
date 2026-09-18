@@ -265,10 +265,17 @@
     box-shadow: var(--card-shadow);
     padding: 16px 16px 8px;
   }
-  .chart-month-label{
-    font-size: 10.5px;
-    fill: var(--text-secondary);
-    font-family: -apple-system, sans-serif;
+  .chart-labels{
+    display: flex;
+    margin-top: 6px;
+  }
+  .chart-labels span{
+    flex: 1;
+    text-align: center;
+    font-size: 11.5px;
+    font-weight: 590;
+    color: var(--text-secondary);
+    -webkit-font-smoothing: antialiased;
   }
 
   .fun-group{ margin-top: 32px; }
@@ -721,7 +728,8 @@
       <div class="group">
         <div class="group-header" data-i18n="spend_over_time">Spend Over Time</div>
         <div class="chart-card">
-          <svg id="spend-chart" width="100%" height="120" viewBox="0 0 860 120" preserveAspectRatio="none"></svg>
+          <svg id="spend-chart" width="100%" height="100" viewBox="0 0 860 100" preserveAspectRatio="none"></svg>
+          <div class="chart-labels" id="chart-labels"></div>
         </div>
       </div>
 
@@ -1364,9 +1372,10 @@ function renderSpendChart(period) {
     }
   }
 
-  if (buckets.length === 0) { svg.innerHTML = ''; return; }
+  const labelsEl = document.getElementById('chart-labels');
+  if (buckets.length === 0) { svg.innerHTML = ''; labelsEl.innerHTML = ''; return; }
 
-  const w = 860, h = 120, padBottom = 20, padTop = 8;
+  const w = 860, h = 100, padBottom = 4, padTop = 8;
   const barGap = buckets.length > 14 ? 4 : 14;
   const barWidth = (w - barGap * (buckets.length + 1)) / buckets.length;
   const max = Math.max(...buckets.map(b => b.value), 1);
@@ -1376,13 +1385,14 @@ function renderSpendChart(period) {
     const barH = ((h - padTop - padBottom) * b.value) / max;
     const x = barGap + i * (barWidth + barGap);
     const y = h - padBottom - barH;
-    return `
-      <rect x="${x}" y="${y}" width="${barWidth}" height="${Math.max(barH, b.value > 0 ? 2 : 0)}" rx="3" fill="${accent}"/>
-      ${b.label ? `<text x="${x + barWidth / 2}" y="${h - 4}" text-anchor="middle" class="chart-month-label">${b.label}</text>` : ''}
-    `;
+    return `<rect x="${x}" y="${y}" width="${barWidth}" height="${Math.max(barH, b.value > 0 ? 2 : 0)}" rx="3" fill="${accent}"/>`;
   }).join('');
 
   svg.innerHTML = bars;
+  // Labels rendered as real HTML text (not SVG text) so they're never
+  // distorted by the chart's non-uniform horizontal scaling on narrow
+  // screens -- SVG preserveAspectRatio="none" squishes glyph shapes.
+  labelsEl.innerHTML = buckets.map(b => `<span>${b.label || ''}</span>`).join('');
 }
 
 async function renderPetrolFun(allDoneSessions) {
