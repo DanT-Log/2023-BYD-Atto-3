@@ -453,9 +453,9 @@
     </div>
 
     <div class="group">
-      <div class="group-header">Monthly Spend</div>
+      <div class="group-header">Spend Over Time</div>
       <div class="chart-card">
-        <svg id="monthly-chart" width="100%" height="120" viewBox="0 0 860 120" preserveAspectRatio="none"></svg>
+        <svg id="spend-chart" width="100%" height="120" viewBox="0 0 860 120" preserveAspectRatio="none"></svg>
       </div>
     </div>
 
@@ -551,6 +551,7 @@ function applyPeriod() {
   const since = periodStart(activePeriod);
   const filtered = allSessions.filter(s => new Date(s.started_at) >= since);
   renderSummary(computeSummary(filtered));
+  renderSpendChart(activePeriod);
 
   document.querySelectorAll('#period-tabs button').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.period === activePeriod);
@@ -744,34 +745,72 @@ function computeTrackedEfficiency(sessions) {
   return totalKm > 0 ? (totalKwh / totalKm) * 100 : null;
 }
 
-function renderMonthlyChart(sessions) {
-  const svg = document.getElementById('monthly-chart');
-  const byMonth = {};
-  sessions.forEach(s => {
-    if (s.cost == null) return;
-    const d = new Date(s.started_at);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    byMonth[key] = (byMonth[key] || 0) + Number(s.cost);
-  });
+function renderSpendChart(period) {
+  const svg = document.getElementById('spend-chart');
+  const now = new Date();
+  let buckets = [];
 
-  const keys = Object.keys(byMonth).sort().slice(-6); // last 6 months with data
-  if (keys.length === 0) { svg.innerHTML = ''; return; }
+  if (period === 'all') {
+    const byMonth = {};
+    allSessions.forEach(s => {
+      if (s.cost == null) return;
+      const d = new Date(s.started_at);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      byMonth[key] = (byMonth[key] || 0) + Number(s.cost);
+    });
+    const keys = Object.keys(byMonth).sort().slice(-6); // last 6 months with data
+    buckets = keys.map(k => ({
+      label: new Date(`${k}-01`).toLocaleDateString('en-AU', { month: 'short' }),
+      value: byMonth[k],
+    }));
+  } else {
+    let start, numDays;
+    if (period === 'daily') {
+      start = startOfDay(now);
+      start.setDate(start.getDate() - 6); // last 7 days including today
+      numDays = 7;
+    } else if (period === 'weekly') {
+      start = startOfWeek(now); // Monday of current week
+      numDays = 7;
+    } else { // monthly
+      start = startOfMonth(now);
+      numDays = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    }
+
+    const byDay = {};
+    allSessions.forEach(s => {
+      if (s.cost == null) return;
+      const key = new Date(s.started_at).toDateString();
+      byDay[key] = (byDay[key] || 0) + Number(s.cost);
+    });
+
+    for (let i = 0; i < numDays; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      if (d > now) break; // don't show future days
+      const key = d.toDateString();
+      const label = period === 'monthly'
+        ? (i === 0 || (i + 1) % 5 === 0 || i === numDays - 1 ? String(d.getDate()) : '')
+        : d.toLocaleDateString('en-AU', { weekday: 'narrow' });
+      buckets.push({ label, value: byDay[key] || 0 });
+    }
+  }
+
+  if (buckets.length === 0) { svg.innerHTML = ''; return; }
 
   const w = 860, h = 120, padBottom = 20, padTop = 8;
-  const barGap = 14;
-  const barWidth = (w - barGap * (keys.length + 1)) / keys.length;
-  const max = Math.max(...keys.map(k => byMonth[k]), 1);
+  const barGap = buckets.length > 14 ? 4 : 14;
+  const barWidth = (w - barGap * (buckets.length + 1)) / buckets.length;
+  const max = Math.max(...buckets.map(b => b.value), 1);
   const accent = window.matchMedia('(prefers-color-scheme: dark)').matches ? '#30D158' : '#34C759';
 
-  const bars = keys.map((k, i) => {
-    const value = byMonth[k];
-    const barH = ((h - padTop - padBottom) * value) / max;
+  const bars = buckets.map((b, i) => {
+    const barH = ((h - padTop - padBottom) * b.value) / max;
     const x = barGap + i * (barWidth + barGap);
     const y = h - padBottom - barH;
-    const monthLabel = new Date(`${k}-01`).toLocaleDateString('en-AU', { month: 'short' });
     return `
-      <rect x="${x}" y="${y}" width="${barWidth}" height="${Math.max(barH, 2)}" rx="4" fill="${accent}"/>
-      <text x="${x + barWidth / 2}" y="${h - 4}" text-anchor="middle" class="chart-month-label">${monthLabel}</text>
+      <rect x="${x}" y="${y}" width="${barWidth}" height="${Math.max(barH, b.value > 0 ? 2 : 0)}" rx="3" fill="${accent}"/>
+      ${b.label ? `<text x="${x + barWidth / 2}" y="${h - 4}" text-anchor="middle" class="chart-month-label">${b.label}</text>` : ''}
     `;
   }).join('');
 
@@ -828,7 +867,6 @@ async function load() {
     allSessions = sessions.filter(s => s.ended_at);
     applyPeriod();
     renderSessions(sessions);
-    renderMonthlyChart(allSessions);
     await loadLiveStatus();
     await loadEfficiency();
     await renderPetrolFun(allSessions);
