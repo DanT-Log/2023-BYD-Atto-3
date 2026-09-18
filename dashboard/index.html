@@ -570,7 +570,7 @@ async function loadLiveStatus() {
     if (openSessions.length > 0) {
       const session = openSessions[0];
       const [snapshots, settingsRows] = await Promise.all([
-        sb(`vehicle_snapshots?recorded_at=gte.${encodeURIComponent(session.started_at)}&select=recorded_at,charging_power_kw,remaining_hours,remaining_minutes&order=recorded_at.asc`),
+        sb(`vehicle_snapshots?recorded_at=gte.${encodeURIComponent(session.started_at)}&select=recorded_at,charging_power_kw,remaining_hours,remaining_minutes,full_hour,full_minute&order=recorded_at.asc`),
         sb('tracker_settings?select=*'),
       ]);
       const settings = settingsRows[0] || {};
@@ -578,16 +578,23 @@ async function loadLiveStatus() {
       const rate = session.location_type === 'home' ? settings.home_rate_per_kwh : settings.public_rate_per_kwh;
       const costSoFar = (energyKwh != null && rate != null) ? energyKwh * rate : null;
 
-      // Use the most recent snapshot with a real countdown reading. The
-      // target is (that snapshot's own timestamp) + (duration reported at
-      // that moment) -- anchoring to the reading's own timestamp, not
-      // "now", means it lands on the correct date even if the remaining
-      // time spans past midnight, with no guessing.
+      // Prefer the genuine countdown duration when the car actually reports
+      // it (some accounts/vehicles don't populate it). Otherwise fall back
+      // to the clock-time-of-day field, resolved unambiguously by anchoring
+      // to that reading's own timestamp: if the target time-of-day has
+      // already passed relative to when it was read, it must mean tomorrow.
       const withRemaining = [...snapshots].reverse().find(s => s.remaining_hours != null && s.remaining_minutes != null);
+      const withFullTime = [...snapshots].reverse().find(s => s.full_hour != null && s.full_minute != null);
       let fullByTarget = null;
       if (withRemaining) {
         const anchor = new Date(withRemaining.recorded_at);
         fullByTarget = new Date(anchor.getTime() + (withRemaining.remaining_hours * 60 + withRemaining.remaining_minutes) * 60000);
+      } else if (withFullTime) {
+        const anchor = new Date(withFullTime.recorded_at);
+        const target = new Date(anchor);
+        target.setHours(withFullTime.full_hour, withFullTime.full_minute, 0, 0);
+        if (target <= anchor) target.setDate(target.getDate() + 1);
+        fullByTarget = target;
       }
 
       renderChargingStatus(session, energyKwh, costSoFar, fullByTarget);
