@@ -61,7 +61,7 @@
   .wrap{
     max-width: 480px;
     margin: 0 auto;
-    padding: max(20px, calc(env(safe-area-inset-top) + 12px)) 16px calc(56px + env(safe-area-inset-bottom));
+    padding: max(20px, calc(env(safe-area-inset-top) + 12px)) 16px calc(84px + env(safe-area-inset-bottom));
   }
 
   .header-row{
@@ -434,6 +434,39 @@
     font-size: 12.5px;
     line-height: 1.4;
   }
+
+  .tab-panel{ animation: panel-in .2s ease; }
+  @keyframes panel-in{ from{ opacity: 0; } to{ opacity: 1; } }
+
+  .tab-bar{
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    display: flex;
+    background: var(--card);
+    border-top: 0.5px solid var(--hairline);
+    padding: 6px 0 calc(4px + env(safe-area-inset-bottom));
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  @supports (backdrop-filter: blur(1px)){
+    .tab-bar{ background: color-mix(in srgb, var(--card) 85%, transparent); }
+  }
+  .tab-bar-btn{
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    border: none;
+    background: transparent;
+    padding: 4px 0;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .tab-bar-btn svg{ width: 24px; height: 24px; }
+  .tab-bar-btn span{ font-size: 10px; font-weight: 590; }
+  .tab-bar-btn.active{ color: var(--green); }
+  .tab-bar-btn:active{ opacity: 0.6; }
 </style>
 </head>
 <body>
@@ -454,75 +487,95 @@
     </div>
     <div class="push-status" id="push-status"></div>
 
-    <div class="status-card" id="status-card">
-      <div class="status-top">
-        <div class="status-dot"></div>
-        <div class="status-title" id="status-title">Loading…</div>
+    <div class="tab-panel" data-panel="status">
+      <div class="status-card" id="status-card">
+        <div class="status-top">
+          <div class="status-dot"></div>
+          <div class="status-title" id="status-title">Loading…</div>
+        </div>
+        <div class="status-idle-detail" id="status-idle-detail"></div>
+        <div class="status-grid" id="status-grid" style="display:none;"></div>
       </div>
-      <div class="status-idle-detail" id="status-idle-detail"></div>
-      <div class="status-grid" id="status-grid" style="display:none;"></div>
-    </div>
 
-    <div class="group">
-      <div class="group-header">Overview</div>
-      <div class="segmented" id="period-tabs">
-        <button data-period="daily">Daily</button>
-        <button data-period="weekly">Weekly</button>
-        <button data-period="monthly">Monthly</button>
-        <button data-period="all">All</button>
-      </div>
-      <div class="group-card">
-        <div class="row"><span class="k">Total energy added</span><span class="v" id="total-kwh">—</span></div>
-        <div class="row"><span class="k">Km tracked between charges</span><span class="v" id="total-km">—</span></div>
-        <div class="row"><span class="k">Avg cost / km</span><span class="v" id="avg-per-km">—</span></div>
-        <div class="row"><span class="k">Avg cost / kWh</span><span class="v" id="avg-per-kwh">—</span></div>
-      </div>
-    </div>
-
-    <div class="group">
-      <div class="group-header">Spend Over Time</div>
-      <div class="chart-card">
-        <svg id="spend-chart" width="100%" height="120" viewBox="0 0 860 120" preserveAspectRatio="none"></svg>
-      </div>
-    </div>
-
-    <div class="hero">
-      <div class="hero-main">
-        <div class="hero-label">Total spent charging</div>
-        <div class="hero-amount" id="total-spent">$0.00</div>
-        <div class="hero-sub" id="total-spent-sub">loading…</div>
-      </div>
-      <div class="hero-side">
-        <svg viewBox="0 0 24 24" fill="currentColor" class="hero-bolt"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
-        <div class="hero-side-stat">
-          <div class="hero-side-k">Energy</div>
-          <div class="hero-side-v" id="hero-kwh">—</div>
+      <div class="hero">
+        <div class="hero-main">
+          <div class="hero-label">Total spent charging</div>
+          <div class="hero-amount" id="total-spent">$0.00</div>
+          <div class="hero-sub" id="total-spent-sub">loading…</div>
+        </div>
+        <div class="hero-side">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="hero-bolt"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
+          <div class="hero-side-stat">
+            <div class="hero-side-k">Energy</div>
+            <div class="hero-side-v" id="hero-kwh">—</div>
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="group">
-      <div class="group-header">Efficiency</div>
-      <div class="group-card">
-        <div class="row"><span class="k">Your tracked efficiency</span><span class="v" id="tracked-efficiency">—</span></div>
-        <div class="row"><span class="k">Car's own estimate</span><span class="v" id="car-efficiency">—</span></div>
+    <div class="tab-panel" data-panel="stats" style="display:none;">
+      <div class="group" style="margin-top:0;">
+        <div class="group-header">Overview</div>
+        <div class="segmented" id="period-tabs">
+          <button data-period="daily">Daily</button>
+          <button data-period="weekly">Weekly</button>
+          <button data-period="monthly">Monthly</button>
+          <button data-period="all">All</button>
+        </div>
+        <div class="group-card">
+          <div class="row"><span class="k">Total energy added</span><span class="v" id="total-kwh">—</span></div>
+          <div class="row"><span class="k">Km tracked between charges</span><span class="v" id="total-km">—</span></div>
+          <div class="row"><span class="k">Avg cost / km</span><span class="v" id="avg-per-km">—</span></div>
+          <div class="row"><span class="k">Avg cost / kWh</span><span class="v" id="avg-per-kwh">—</span></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group-header">Spend Over Time</div>
+        <div class="chart-card">
+          <svg id="spend-chart" width="100%" height="120" viewBox="0 0 860 120" preserveAspectRatio="none"></svg>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group-header">Efficiency</div>
+        <div class="group-card">
+          <div class="row"><span class="k">Your tracked efficiency</span><span class="v" id="tracked-efficiency">—</span></div>
+          <div class="row"><span class="k">Car's own estimate</span><span class="v" id="car-efficiency">—</span></div>
+        </div>
+      </div>
+
+      <div class="group fun-group">
+        <div class="group-header">Just For Fun</div>
+        <div class="group-card fun-card" id="petrol-fun"></div>
       </div>
     </div>
 
-    <div class="group">
-      <div class="group-header-row">
-        <div class="group-header">Recent Charges</div>
-        <a class="view-all-link" href="charges.html">View All</a>
+    <div class="tab-panel" data-panel="charges" style="display:none;">
+      <div class="group" style="margin-top:0;">
+        <div class="group-header-row">
+          <div class="group-header">Recent Charges</div>
+          <a class="view-all-link" href="charges.html">View All</a>
+        </div>
+        <div class="group-card" id="sessions"></div>
       </div>
-      <div class="group-card" id="sessions"></div>
+      <div class="footnote">Updates automatically as the car reports new data. Tap a charge for full details.</div>
     </div>
+  </div>
 
-    <div class="footnote">Updates automatically as the car reports new data. Tap a charge for full details.</div>
-
-    <div class="group fun-group">
-      <div class="group-header">Just For Fun</div>
-      <div class="group-card fun-card" id="petrol-fun"></div>
-    </div>
+  <div class="tab-bar">
+    <button class="tab-bar-btn" data-tab="status">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
+      <span>Status</span>
+    </button>
+    <button class="tab-bar-btn" data-tab="stats">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+      <span>Stats</span>
+    </button>
+    <button class="tab-bar-btn" data-tab="charges">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+      <span>Charges</span>
+    </button>
   </div>
 
 <script>
@@ -1032,6 +1085,25 @@ pollNowBtn.addEventListener('click', async () => {
   if (!passkey) return;
   await doPollNow(passkey);
 });
+
+const TAB_STORAGE_KEY = 'atto3_active_tab';
+
+function switchTab(tabName) {
+  document.querySelectorAll('.tab-panel').forEach(panel => {
+    panel.style.display = panel.dataset.panel === tabName ? 'block' : 'none';
+  });
+  document.querySelectorAll('.tab-bar-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tabName);
+  });
+  localStorage.setItem(TAB_STORAGE_KEY, tabName);
+  window.scrollTo(0, 0);
+}
+
+document.querySelectorAll('.tab-bar-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
+
+switchTab(localStorage.getItem(TAB_STORAGE_KEY) || 'status');
 
 load();
 setInterval(load, 60000);
