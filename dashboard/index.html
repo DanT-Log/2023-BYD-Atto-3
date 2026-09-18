@@ -596,13 +596,13 @@ function fmtRemaining(target) {
   return h === 0 ? `${m} min` : `${h}h ${m}min`;
 }
 
-function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, batteryPct) {
+function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, batteryPct, lastUpdated) {
   const card = document.getElementById('status-card');
   card.classList.add('charging');
   const isHome = session.location_type === 'home';
   const pctStr = batteryPct != null ? `, ${Math.round(batteryPct)}%` : '';
   document.getElementById('status-title').textContent = `Charging \u2014 ${isHome ? 'Home' : 'Public Charger'}${pctStr}`;
-  document.getElementById('status-idle-detail').textContent = '';
+  document.getElementById('status-idle-detail').textContent = lastUpdated ? `Updated ${relativeTime(lastUpdated)}` : '';
 
   const grid = document.getElementById('status-grid');
   grid.style.display = 'grid';
@@ -672,7 +672,8 @@ async function loadLiveStatus() {
       }
 
       const latestPct = [...snapshots].reverse().find(s => s.battery_pct != null)?.battery_pct;
-      renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, latestPct);
+      const lastUpdated = snapshots.length ? snapshots[snapshots.length - 1].recorded_at : null;
+      renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, latestPct, lastUpdated);
     } else {
       const latest = await sb('vehicle_snapshots?select=battery_pct,range_km,recorded_at&order=recorded_at.desc&limit=1');
       renderIdleStatus(latest[0] || null);
