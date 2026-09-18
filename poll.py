@@ -181,6 +181,30 @@ def classify_location(lat: float | None, lon: float | None, settings: dict) -> s
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC")
 
 
+def notify_charge_started(location_type: str, start_pct: float | None) -> None:
+    if not NTFY_TOPIC:
+        print("notify skipped: NTFY_TOPIC is not set", file=sys.stderr)
+        return
+
+    place = "Home" if location_type == "home" else ("Public" if location_type == "public" else "Unknown location")
+    pct_str = f"{start_pct}%" if start_pct is not None else "unknown battery %"
+    message = f"{place} charging started at {pct_str}."
+
+    try:
+        resp = requests.post(
+            f"https://ntfy.sh/{NTFY_TOPIC}",
+            data=message.encode("utf-8"),
+            headers={
+                "Title": f"BYD Atto 3 \u2014 {place.lower()} charging started",
+                "Priority": "default",
+            },
+            timeout=10,
+        )
+        print(f"ntfy start notification sent: status={resp.status_code}")
+    except Exception as exc:  # noqa: BLE001 - notification failure shouldn't break the poll
+        print(f"warning: ntfy notification failed: {exc}", file=sys.stderr)
+
+
 def notify_charge_finished(
     location_type: str,
     start_pct: float | None,
@@ -312,6 +336,7 @@ def main() -> None:
                 },
             )
             print(f"charging session opened ({location_type})")
+            notify_charge_started(location_type, state["battery_pct"])
         else:
             print("charging session already open, skipping open")
 
