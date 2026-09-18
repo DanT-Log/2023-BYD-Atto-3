@@ -22,18 +22,22 @@ Field notes (confirmed against pyBYD 0.0.75 source, not guessed):
     - Odometer:       realtime.total_mileage
     - GPS:             gps.latitude / gps.longitude
 
-    charging_power_kw is populated from realtime.power_battery as a
-    best-effort value. Its exact sign/unit convention is NOT confirmed
-    against a live car yet (pyBYD's own docs note some fields are still
-    being mapped) — treat it as informational only until verified. Cost
-    calculations in this script rely solely on battery % delta, not on
-    this field, so it does not affect accuracy of the cost/km numbers.
+    charging_power_kw comes from the "chargePower" field in the raw API
+    response (unit confirmed via the accompanying "chargePowerUnit": "kW").
+    This field isn't yet mapped as a typed attribute on pyBYD's
+    ChargingStatus model as of 0.0.75, so it's read directly from
+    `.raw`. energy_added_kwh is computed by trapezoidal integration of
+    this value across every snapshot taken during a charging session
+    (i.e. actual metered energy over time), falling back to a
+    battery-capacity-% estimate only if fewer than two power readings
+    are available for that session.
 """
 
 from __future__ import annotations
 
 import asyncio
 import os
+import re
 import sys
 from datetime import datetime, timezone
 
@@ -51,7 +55,7 @@ HEADERS = {
 }
 
 
-def sb_get(table: str, params: dict) -> list[dict]:
+def sb_get(table: str, params: dict | list[tuple[str, str]]) -> list[dict]:
     resp = requests.get(f"{SUPABASE_URL}/rest/v1/{table}", headers=HEADERS, params=params, timeout=15)
     resp.raise_for_status()
     return resp.json()
@@ -98,6 +102,42 @@ def get_last_closed_session() -> dict | None:
     return rows[0] if rows else None
 
 
+def parse_ts(s: str) -> datetime:
+    s = s.strip()
+    if re.search(r"[+-]\d{2}$", s):  # e.g. "...+00" -> "...+00:00"
+        s += ":00"
+    return datetime.fromisoformat(s)
+
+
+def integrate_energy_kwh(session_start: str, session_end: str) -> float | None:
+    """Trapezoidal integration of charging_power_kw across every snapshot
+    taken between session_start and session_end (inclusive). Returns None
+    if fewer than two usable power readings exist, so the caller can fall
+    back to the %-based estimate.
+    """
+    snapshots = sb_get(
+        "vehicle_snapshots",
+        [
+            ("recorded_at", f"gte.{session_start}"),
+            ("recorded_at", f"lte.{session_end}"),
+            ("order", "recorded_at.asc"),
+        ],
+    )
+    usable = [s for s in snapshots if s.get("charging_power_kw") is not None]
+    if len(usable) < 2:
+        return None
+
+    total_kwh = 0.0
+    for prev, curr in zip(usable, usable[1:]):
+        t0, t1 = parse_ts(prev["recorded_at"]), parse_ts(curr["recorded_at"])
+        hours = (t1 - t0).total_seconds() / 3600.0
+        if hours <= 0:
+            continue
+        p0, p1 = float(prev["charging_power_kw"]), float(curr["charging_power_kw"])
+        total_kwh += (p0 + p1) / 2.0 * hours
+    return total_kwh
+
+
 def get_tracker_settings() -> dict:
     rows = sb_get("tracker_settings", {"select": "*"})
     if not rows:
@@ -132,10 +172,21 @@ async def fetch_vehicle_state() -> dict:
         else:
             is_charging = realtime.charging_state == ChargingState.CHARGING
 
+        # "chargePower" (kW) lives in the raw response but isn't yet a typed
+        # field on ChargingStatus in pyBYD 0.0.75 — pull it out directly.
+        charging_raw = charging.raw if isinstance(charging.raw, dict) else {}
+        charging_power_kw = None
+        raw_power = charging_raw.get("chargePower")
+        if raw_power is not None:
+            try:
+                charging_power_kw = float(raw_power)
+            except (TypeError, ValueError):
+                charging_power_kw = None
+
         return {
             "battery_pct": battery_pct,
             "is_charging": is_charging,
-            "charging_power_kw": realtime.power_battery,
+            "charging_power_kw": charging_power_kw,
             "odometer_km": realtime.total_mileage,
             "latitude": latitude,
             "longitude": longitude,
@@ -185,9 +236,14 @@ def main() -> None:
             start_pct = open_session["start_pct"]
             end_pct = state["battery_pct"]
             pct_delta = (end_pct - start_pct) if (start_pct is not None and end_pct is not None) else None
-            energy_added_kwh = (
-                (pct_delta / 100.0) * settings["battery_capacity_kwh"] if pct_delta is not None else None
-            )
+
+            energy_added_kwh = integrate_energy_kwh(open_session["started_at"], now)
+            estimate_method = "integrated"
+            if energy_added_kwh is None:
+                energy_added_kwh = (
+                    (pct_delta / 100.0) * settings["battery_capacity_kwh"] if pct_delta is not None else None
+                )
+                estimate_method = "pct_estimate"
 
             last_closed = get_last_closed_session()
             km_since_last_charge = None
@@ -206,7 +262,10 @@ def main() -> None:
                     "km_since_last_charge": km_since_last_charge,
                 },
             )
-            print(f"charging session closed: {pct_delta}% added, {energy_added_kwh} kWh")
+            print(
+                f"charging session closed: {pct_delta}% added, "
+                f"{energy_added_kwh} kWh ({estimate_method})"
+            )
 
 
 if __name__ == "__main__":
