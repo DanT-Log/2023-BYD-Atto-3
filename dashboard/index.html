@@ -646,37 +646,37 @@
       <div class="status-card" id="status-card">
         <div class="status-top">
           <div class="status-dot"></div>
-          <div class="status-title" id="status-title">Loading…</div>
+          <div class="status-title" id="status-title" data-i18n="loading">Loading…</div>
         </div>
         <div class="status-idle-detail" id="status-idle-detail"></div>
         <div class="status-grid" id="status-grid" style="display:none;"></div>
       </div>
 
       <div class="group">
-        <div class="group-header">Location</div>
+        <div class="group-header" data-i18n="location_header">Location</div>
         <div class="group-card location-card" id="location-locked">
           <div class="location-row">
             <div class="location-pin location-pin-locked">
               <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
             </div>
-            <div class="location-text">Hidden until unlocked</div>
+            <div class="location-text" data-i18n="location_hidden">Hidden until unlocked</div>
           </div>
-          <button class="settings-unlock-btn location-unlock-btn" id="location-unlock-btn">Enter Passkey</button>
+          <button class="settings-unlock-btn location-unlock-btn" id="location-unlock-btn" data-i18n="enter_passkey">Enter Passkey</button>
         </div>
         <div class="group-card location-card" id="location-unlocked" style="display:none;">
           <div class="location-row">
             <div class="location-pin">
               <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.1 7-11.5A7 7 0 0 0 5 9.5C5 14.9 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.3"/></svg>
             </div>
-            <div class="location-text" id="location-text">Loading…</div>
+            <div class="location-text" id="location-text" data-i18n="loading">Loading…</div>
           </div>
         </div>
       </div>
 
       <div class="group">
-        <div class="group-header">Last Charge</div>
+        <div class="group-header" data-i18n="last_charge_header">Last Charge</div>
         <div class="group-card" id="last-charge-card">
-          <div class="empty">No charges recorded yet.</div>
+          <div class="empty" data-i18n="no_charges_yet">No charges recorded yet.</div>
         </div>
       </div>
     </div>
@@ -684,85 +684,85 @@
     <div class="tab-panel" data-panel="stats" style="display:none;">
       <div class="hero" style="margin-top:0;">
         <div class="hero-main">
-          <div class="hero-label">Total spent charging</div>
+          <div class="hero-label" data-i18n="hero_label">Total spent charging</div>
           <div class="hero-amount" id="total-spent">$0.00</div>
           <div class="hero-sub" id="total-spent-sub">loading…</div>
         </div>
         <div class="hero-side">
           <svg viewBox="0 0 24 24" fill="currentColor" class="hero-bolt"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
           <div class="hero-side-stat">
-            <div class="hero-side-k">Energy</div>
+            <div class="hero-side-k" data-i18n="energy_side_label">Energy</div>
             <div class="hero-side-v" id="hero-kwh">—</div>
           </div>
         </div>
       </div>
 
       <div class="group">
-        <div class="group-header">Insights</div>
+        <div class="group-header" data-i18n="insights_header">Insights</div>
         <div class="group-card" id="insights-card"></div>
       </div>
 
       <div class="group">
-        <div class="group-header">Overview</div>
+        <div class="group-header" data-i18n="overview_header">Overview</div>
         <div class="segmented" id="period-tabs">
-          <button data-period="daily">Daily</button>
-          <button data-period="weekly">Weekly</button>
-          <button data-period="monthly">Monthly</button>
-          <button data-period="all">All</button>
+          <button data-period="daily" data-i18n="daily">Daily</button>
+          <button data-period="weekly" data-i18n="weekly">Weekly</button>
+          <button data-period="monthly" data-i18n="monthly">Monthly</button>
+          <button data-period="all" data-i18n="all">All</button>
         </div>
         <div class="group-card">
-          <div class="row"><span class="k">Total energy added</span><span class="v" id="total-kwh">—</span></div>
-          <div class="row"><span class="k">Km tracked between charges</span><span class="v" id="total-km">—</span></div>
-          <div class="row"><span class="k">Avg cost / km</span><span class="v" id="avg-per-km">—</span></div>
-          <div class="row"><span class="k">Avg cost / kWh</span><span class="v" id="avg-per-kwh">—</span></div>
+          <div class="row"><span class="k" data-i18n="total_energy_added">Total energy added</span><span class="v" id="total-kwh">—</span></div>
+          <div class="row"><span class="k" data-i18n="km_tracked">Km tracked between charges</span><span class="v" id="total-km">—</span></div>
+          <div class="row"><span class="k" data-i18n="avg_per_km">Avg cost / km</span><span class="v" id="avg-per-km">—</span></div>
+          <div class="row"><span class="k" data-i18n="avg_per_kwh">Avg cost / kWh</span><span class="v" id="avg-per-kwh">—</span></div>
         </div>
       </div>
 
       <div class="group">
-        <div class="group-header">Spend Over Time</div>
+        <div class="group-header" data-i18n="spend_over_time">Spend Over Time</div>
         <div class="chart-card">
           <svg id="spend-chart" width="100%" height="120" viewBox="0 0 860 120" preserveAspectRatio="none"></svg>
         </div>
       </div>
 
       <div class="group">
-        <div class="group-header">Battery Health</div>
+        <div class="group-header" data-i18n="battery_health_header">Battery Health</div>
         <div class="group-card" id="battery-health-card"></div>
       </div>
 
       <div class="group">
-        <div class="group-header">Efficiency</div>
+        <div class="group-header" data-i18n="efficiency_header">Efficiency</div>
         <div class="group-card">
-          <div class="row"><span class="k">Your tracked efficiency</span><span class="v" id="tracked-efficiency">—</span></div>
-          <div class="row"><span class="k">Car's own estimate</span><span class="v" id="car-efficiency">—</span></div>
+          <div class="row"><span class="k" data-i18n="tracked_efficiency">Your tracked efficiency</span><span class="v" id="tracked-efficiency">—</span></div>
+          <div class="row"><span class="k" data-i18n="car_efficiency">Car's own estimate</span><span class="v" id="car-efficiency">—</span></div>
         </div>
       </div>
 
       <div class="group">
         <div class="group-header-row">
-          <div class="group-header">Cost of Ownership</div>
-          <button class="edit-link" id="add-expense-btn">Add Expense</button>
+          <div class="group-header" data-i18n="ownership_header">Cost of Ownership</div>
+          <button class="edit-link" id="add-expense-btn" data-i18n="add_expense">Add Expense</button>
         </div>
         <div class="group-card" id="ownership-card"></div>
         <div class="group-card expense-form" id="expense-form" style="display:none; margin-top:10px;">
           <div class="edit-pad">
-            <label class="edit-label">Category</label>
+            <label class="edit-label" data-i18n="field_category">Category</label>
             <select id="expense-category" class="edit-input" style="margin-bottom:14px;">
-              <option value="registration">Registration</option>
-              <option value="insurance">Insurance</option>
-              <option value="tyres">Tyres</option>
-              <option value="servicing">Servicing</option>
-              <option value="other">Other</option>
+              <option value="registration" data-i18n="cat_registration">Registration</option>
+              <option value="insurance" data-i18n="cat_insurance">Insurance</option>
+              <option value="tyres" data-i18n="cat_tyres">Tyres</option>
+              <option value="servicing" data-i18n="cat_servicing">Servicing</option>
+              <option value="other" data-i18n="cat_other">Other</option>
             </select>
-            <label class="edit-label">Amount ($)</label>
+            <label class="edit-label" data-i18n="field_amount">Amount ($)</label>
             <input type="number" step="0.01" min="0" id="expense-amount" class="edit-input" style="margin-bottom:14px;">
-            <label class="edit-label">Date</label>
+            <label class="edit-label" data-i18n="field_date">Date</label>
             <input type="date" id="expense-date" class="edit-input" style="margin-bottom:14px;">
-            <label class="edit-label">Notes (optional)</label>
+            <label class="edit-label" data-i18n="field_notes">Notes (optional)</label>
             <input type="text" id="expense-notes" class="edit-input" placeholder="e.g. front tyres, Bob Jane">
             <div class="edit-actions" style="margin-top:16px;">
-              <button class="edit-btn-save" id="expense-save-btn">Save</button>
-              <button class="edit-btn-cancel" id="expense-cancel-btn">Cancel</button>
+              <button class="edit-btn-save" id="expense-save-btn" data-i18n="save">Save</button>
+              <button class="edit-btn-cancel" id="expense-cancel-btn" data-i18n="cancel">Cancel</button>
             </div>
             <div class="edit-status" id="expense-status"></div>
           </div>
@@ -770,7 +770,7 @@
       </div>
 
       <div class="group fun-group">
-        <div class="group-header">Just For Fun</div>
+        <div class="group-header" data-i18n="fun_header">Just For Fun</div>
         <div class="group-card fun-card" id="petrol-fun"></div>
       </div>
     </div>
@@ -778,50 +778,58 @@
     <div class="tab-panel" data-panel="charges" style="display:none;">
       <div class="group" style="margin-top:0;">
         <div class="group-header-row">
-          <div class="group-header">Recent Charges</div>
-          <a class="view-all-link" href="charges.html">View All</a>
+          <div class="group-header" data-i18n="recent_charges_header">Recent Charges</div>
+          <a class="view-all-link" href="charges.html" data-i18n="view_all">View All</a>
         </div>
         <div class="group-card" id="sessions"></div>
       </div>
-      <div class="footnote">Updates automatically as the car reports new data. Tap a charge for full details.</div>
+      <div class="footnote" data-i18n="footnote">Updates automatically as the car reports new data. Tap a charge for full details.</div>
     </div>
 
     <div class="tab-panel" data-panel="settings" style="display:none;">
+      <div class="group" style="margin-top:0;">
+        <div class="group-header" data-i18n="language_header">Language</div>
+        <div class="segmented" id="lang-tabs">
+          <button data-lang="en" data-i18n="lang_en">English</button>
+          <button data-lang="vi" data-i18n="lang_vi">Ti\u1ebfng Vi\u1ec7t</button>
+        </div>
+      </div>
+
       <div class="settings-locked" id="settings-locked">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="settings-lock-icon"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
-        <div class="settings-locked-title">Settings are locked</div>
-        <div class="settings-locked-sub">Enter the passkey to view and edit charging settings.</div>
-        <button class="settings-unlock-btn" id="settings-unlock-btn">Enter Passkey</button>
+        <div class="settings-locked-title" data-i18n="settings_locked_title">Settings are locked</div>
+        <div class="settings-locked-sub" data-i18n="settings_locked_sub">Enter the passkey to view and edit charging settings.</div>
+        <button class="settings-unlock-btn" id="settings-unlock-btn" data-i18n="enter_passkey">Enter Passkey</button>
       </div>
 
       <div class="settings-form" id="settings-form" style="display:none;">
         <div class="group" style="margin-top:0;">
-          <div class="group-header">Rates</div>
+          <div class="group-header" data-i18n="rates_header">Rates</div>
           <div class="group-card">
-            <div class="settings-row"><label>Home rate ($/kWh)</label><input type="number" step="0.01" min="0" id="s-home-rate"></div>
-            <div class="settings-row"><label>Public rate default ($/kWh)</label><input type="number" step="0.01" min="0" id="s-public-rate"></div>
+            <div class="settings-row"><label data-i18n="home_rate">Home rate ($/kWh)</label><input type="number" step="0.01" min="0" id="s-home-rate"></div>
+            <div class="settings-row"><label data-i18n="public_rate">Public rate default ($/kWh)</label><input type="number" step="0.01" min="0" id="s-public-rate"></div>
           </div>
         </div>
         <div class="group">
-          <div class="group-header">Vehicle</div>
+          <div class="group-header" data-i18n="vehicle_header">Vehicle</div>
           <div class="group-card">
-            <div class="settings-row"><label>Battery capacity (kWh)</label><input type="number" step="0.1" min="0" id="s-battery-capacity"></div>
+            <div class="settings-row"><label data-i18n="battery_capacity">Battery capacity (kWh)</label><input type="number" step="0.1" min="0" id="s-battery-capacity"></div>
           </div>
         </div>
         <div class="group">
-          <div class="group-header">Home Detection</div>
+          <div class="group-header" data-i18n="home_detection_header">Home Detection</div>
           <div class="group-card">
-            <div class="settings-row"><label>Home radius (metres)</label><input type="number" step="10" min="0" id="s-home-radius"></div>
+            <div class="settings-row"><label data-i18n="home_radius">Home radius (metres)</label><input type="number" step="10" min="0" id="s-home-radius"></div>
           </div>
         </div>
         <div class="group">
-          <div class="group-header">Petrol Comparison</div>
+          <div class="group-header" data-i18n="petrol_header">Petrol Comparison</div>
           <div class="group-card">
-            <div class="settings-row"><label>Petrol price ($/L)</label><input type="number" step="0.01" min="0" id="s-petrol-price"></div>
-            <div class="settings-row"><label>Petrol consumption (L/100km)</label><input type="number" step="0.1" min="0" id="s-petrol-consumption"></div>
+            <div class="settings-row"><label data-i18n="petrol_price">Petrol price ($/L)</label><input type="number" step="0.01" min="0" id="s-petrol-price"></div>
+            <div class="settings-row"><label data-i18n="petrol_consumption">Petrol consumption (L/100km)</label><input type="number" step="0.1" min="0" id="s-petrol-consumption"></div>
           </div>
         </div>
-        <button class="settings-save-btn" id="settings-save-btn">Save Settings</button>
+        <button class="settings-save-btn" id="settings-save-btn" data-i18n="save_settings">Save Settings</button>
         <div class="settings-status" id="settings-status"></div>
       </div>
     </div>
@@ -830,24 +838,209 @@
   <div class="tab-bar">
     <button class="tab-bar-btn" data-tab="status">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
-      <span>Status</span>
+      <span data-i18n="tab_status">Status</span>
     </button>
     <button class="tab-bar-btn" data-tab="stats">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
-      <span>Stats</span>
+      <span data-i18n="tab_stats">Stats</span>
     </button>
     <button class="tab-bar-btn" data-tab="charges">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
-      <span>Charges</span>
+      <span data-i18n="tab_charges">Charges</span>
     </button>
     <button class="tab-bar-btn" data-tab="settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-      <span>Settings</span>
+      <span data-i18n="tab_settings">Settings</span>
     </button>
   </div>
 
 <script>
 const SUPABASE_URL = "https://ujpcabmacpnbtyiharnk.supabase.co";
+
+// ---------- i18n ----------
+const TRANSLATIONS = {
+  en: {
+    tab_status: "Status", tab_stats: "Stats", tab_charges: "Charges", tab_settings: "Settings",
+    loading: "Loading\u2026",
+    not_charging: "Not charging",
+    home: "Home", public_charger: "Public Charger", charging_generic: "Charging",
+    updated: "Updated",
+    just_now: "just now",
+    location_header: "Location",
+    location_hidden: "Hidden until unlocked",
+    enter_passkey: "Enter Passkey",
+    last_charge_header: "Last Charge",
+    no_charges_yet: "No charges recorded yet.",
+    insights_header: "Insights",
+    insights_empty: "Keep charging \u2014 insights will show up once there's enough history.",
+    hero_label: "Total spent charging",
+    energy_side_label: "Energy",
+    overview_header: "Overview",
+    daily: "Daily", weekly: "Weekly", monthly: "Monthly", all: "All",
+    total_energy_added: "Total energy added",
+    km_tracked: "Km tracked between charges",
+    avg_per_km: "Avg cost / km",
+    avg_per_kwh: "Avg cost / kWh",
+    spend_over_time: "Spend Over Time",
+    battery_health_header: "Battery Health",
+    estimated_capacity: "Estimated capacity",
+    rated_capacity: "Rated capacity",
+    health: "Health",
+    battery_health_empty: "Need a few more charges with 15%+ gained to estimate battery health.",
+    efficiency_header: "Efficiency",
+    tracked_efficiency: "Your tracked efficiency",
+    car_efficiency: "Car's own estimate",
+    ownership_header: "Cost of Ownership",
+    add_expense: "Add Expense",
+    cat_charging: "Charging", cat_registration: "Registration", cat_insurance: "Insurance",
+    cat_tyres: "Tyres", cat_servicing: "Servicing", cat_other: "Other", total: "Total",
+    field_category: "Category", field_amount: "Amount ($)", field_date: "Date", field_notes: "Notes (optional)",
+    save: "Save", cancel: "Cancel",
+    fun_header: "Just For Fun",
+    recent_charges_header: "Recent Charges", view_all: "View All",
+    no_completed_charges: "No completed charges yet \u2014 check back once the car finishes a charge.",
+    footnote: "Updates automatically as the car reports new data. Tap a charge for full details.",
+    settings_locked_title: "Settings are locked",
+    settings_locked_sub: "Enter the passkey to view and edit charging settings.",
+    rates_header: "Rates", home_rate: "Home rate ($/kWh)", public_rate: "Public rate default ($/kWh)",
+    vehicle_header: "Vehicle", battery_capacity: "Battery capacity (kWh)",
+    home_detection_header: "Home Detection", home_radius: "Home radius (metres)",
+    petrol_header: "Petrol Comparison", petrol_price: "Petrol price ($/L)", petrol_consumption: "Petrol consumption (L/100km)",
+    save_settings: "Save Settings", saved: "Saved.", save_failed: "Failed to save \u2014 try again.",
+    invalid_numbers: "All fields must be valid, non-negative numbers.",
+    language_header: "Language", lang_en: "English", lang_vi: "Ti\u1ebfng Vi\u1ec7t",
+    passkey_title: "Enter Passkey", passkey_sub: "Required to poll the car or edit a charge.",
+    passkey_wrong: "Incorrect passkey \u2014 try again.",
+    unlock: "Unlock",
+    polling_now: "Polling the car now\u2026", waiting_response: "Waiting for the car to respond\u2026",
+    poll_failed: "Poll request failed \u2014 try again.",
+    couldnt_load_ownership: "Couldn't load ownership costs.",
+    enter_valid_amount_date: "Enter a valid amount and date.",
+    enter_valid_rate: "Enter a valid rate.",
+    saving: "Saving\u2026",
+    started: "Started", charging_speed: "Charging speed", elapsed: "Elapsed",
+    energy_so_far: "Energy so far", cost_so_far: "Cost so far",
+    estimated_full_by: "Estimated full by", time_remaining: "Time remaining",
+    any_moment: "Any moment",
+    insight_week_up: "You're up {pct}% vs last week ({a} vs {b}).",
+    insight_week_down: "You're down {pct}% vs last week ({a} vs {b}).",
+    insight_cheapest: "Cheapest charge: {cost} on {date}.",
+    insight_priciest: "Priciest charge: {cost} on {date}.",
+    insight_streak: "You've charged at home {n} times in a row.",
+    insight_best_value: "Best value charge: {rate}\u00a2/km on {date}.",
+    fun_petrol_cost: "Over {km} km tracked, an equivalent petrol car would've cost about {cost} to run.",
+    fun_savings: "You spent {spent} instead \u2014 roughly {savings} saved, and about {co2} kg of CO\u2082 avoided.",
+    fun_assumes: "Assumes {l} L/100km at {price}/L \u2014 a rough comparison, not precise accounting.",
+    fun_empty: "Drive a bit more and I'll show you what you're saving vs petrol.",
+    min_ago: "{n} min ago", hour_ago: "1 hour ago", hours_ago: "{n} hours ago",
+    duration_min: "{m} min", duration_hm: "{h}h {m}min",
+    not_charging_pct: "Not charging \u2014 {pct}% battery",
+    range_suffix: "{km} km range \u00b7 ",
+    charges_period_one: "{n} charge this period", charges_period_many: "{n} charges this period",
+    no_charges_period: "No charges this period",
+  },
+  vi: {
+    tab_status: "Tr\u1ea1ng th\u00e1i", tab_stats: "Th\u1ed1ng k\u00ea", tab_charges: "L\u01b0\u1ee3t s\u1ea1c", tab_settings: "C\u00e0i \u0111\u1eb7t",
+    loading: "\u0110ang t\u1ea3i\u2026",
+    not_charging: "Kh\u00f4ng s\u1ea1c",
+    home: "Nh\u00e0", public_charger: "Tr\u1ea1m s\u1ea1c c\u00f4ng c\u1ed9ng", charging_generic: "\u0110ang s\u1ea1c",
+    updated: "C\u1eadp nh\u1eadt",
+    just_now: "v\u1eeba xong",
+    location_header: "V\u1ecb tr\u00ed",
+    location_hidden: "\u1ea8n cho \u0111\u1ebfn khi m\u1edf kh\u00f3a",
+    enter_passkey: "Nh\u1eadp m\u00e3 PIN",
+    last_charge_header: "L\u1ea7n s\u1ea1c g\u1ea7n nh\u1ea5t",
+    no_charges_yet: "Ch\u01b0a c\u00f3 l\u01b0\u1ee3t s\u1ea1c n\u00e0o \u0111\u01b0\u1ee3c ghi l\u1ea1i.",
+    insights_header: "Nh\u1eadn x\u00e9t",
+    insights_empty: "Ti\u1ebfp t\u1ee5c s\u1ea1c \u2014 nh\u1eadn x\u00e9t s\u1ebd xu\u1ea5t hi\u1ec7n khi c\u00f3 \u0111\u1ee7 d\u1eef li\u1ec7u.",
+    hero_label: "T\u1ed5ng chi ph\u00ed s\u1ea1c",
+    energy_side_label: "N\u0103ng l\u01b0\u1ee3ng",
+    overview_header: "T\u1ed5ng quan",
+    daily: "H\u00e0ng ng\u00e0y", weekly: "H\u00e0ng tu\u1ea7n", monthly: "H\u00e0ng th\u00e1ng", all: "T\u1ea5t c\u1ea3",
+    total_energy_added: "T\u1ed5ng n\u0103ng l\u01b0\u1ee3ng \u0111\u00e3 n\u1ea1p",
+    km_tracked: "S\u1ed1 km gi\u1eefa c\u00e1c l\u1ea7n s\u1ea1c",
+    avg_per_km: "Chi ph\u00ed TB / km",
+    avg_per_kwh: "Chi ph\u00ed TB / kWh",
+    spend_over_time: "Chi ti\u00eau theo th\u1eddi gian",
+    battery_health_header: "T\u00ecnh tr\u1ea1ng pin",
+    estimated_capacity: "Dung l\u01b0\u1ee3ng \u01b0\u1edbc t\u00ednh",
+    rated_capacity: "Dung l\u01b0\u1ee3ng \u0111\u1ecbnh m\u1ee9c",
+    health: "T\u00ecnh tr\u1ea1ng",
+    battery_health_empty: "C\u1ea7n th\u00eam v\u00e0i l\u01b0\u1ee3t s\u1ea1c t\u0103ng tr\u00ean 15% \u0111\u1ec3 \u01b0\u1edbc t\u00ednh t\u00ecnh tr\u1ea1ng pin.",
+    efficiency_header: "Hi\u1ec7u su\u1ea5t",
+    tracked_efficiency: "Hi\u1ec7u su\u1ea5t b\u1ea1n theo d\u00f5i",
+    car_efficiency: "\u01af\u1edbc t\u00ednh c\u1ee7a xe",
+    ownership_header: "Chi ph\u00ed s\u1edf h\u1eefu",
+    add_expense: "Th\u00eam chi ph\u00ed",
+    cat_charging: "S\u1ea1c \u0111i\u1ec7n", cat_registration: "\u0110\u0103ng k\u00fd xe", cat_insurance: "B\u1ea3o hi\u1ec3m",
+    cat_tyres: "L\u1ed1p xe", cat_servicing: "B\u1ea3o d\u01b0\u1ee1ng", cat_other: "Kh\u00e1c", total: "T\u1ed5ng c\u1ed9ng",
+    field_category: "Danh m\u1ee5c", field_amount: "S\u1ed1 ti\u1ec1n ($)", field_date: "Ng\u00e0y", field_notes: "Ghi ch\u00fa (kh\u00f4ng b\u1eaft bu\u1ed9c)",
+    save: "L\u01b0u", cancel: "H\u1ee7y",
+    fun_header: "Ch\u1ec9 \u0111\u1ec3 vui th\u00f4i",
+    recent_charges_header: "L\u01b0\u1ee3t s\u1ea1c g\u1ea7n \u0111\u00e2y", view_all: "Xem t\u1ea5t c\u1ea3",
+    no_completed_charges: "Ch\u01b0a c\u00f3 l\u01b0\u1ee3t s\u1ea1c n\u00e0o ho\u00e0n t\u1ea5t \u2014 quay l\u1ea1i sau khi xe s\u1ea1c xong.",
+    footnote: "T\u1ef1 \u0111\u1ed9ng c\u1eadp nh\u1eadt khi xe b\u00e1o d\u1eef li\u1ec7u m\u1edbi. Nh\u1ea5n v\u00e0o m\u1ed9t l\u01b0\u1ee3t s\u1ea1c \u0111\u1ec3 xem chi ti\u1ebft.",
+    settings_locked_title: "C\u00e0i \u0111\u1eb7t \u0111ang b\u1ecb kh\u00f3a",
+    settings_locked_sub: "Nh\u1eadp m\u00e3 PIN \u0111\u1ec3 xem v\u00e0 ch\u1ec9nh s\u1eeda c\u00e0i \u0111\u1eb7t s\u1ea1c.",
+    rates_header: "Gi\u00e1 \u0111i\u1ec7n", home_rate: "Gi\u00e1 t\u1ea1i nh\u00e0 ($/kWh)", public_rate: "Gi\u00e1 c\u00f4ng c\u1ed9ng m\u1eb7c \u0111\u1ecbnh ($/kWh)",
+    vehicle_header: "Xe", battery_capacity: "Dung l\u01b0\u1ee3ng pin (kWh)",
+    home_detection_header: "Nh\u1eadn di\u1ec7n v\u1ecb tr\u00ed nh\u00e0", home_radius: "B\u00e1n k\u00ednh nh\u00e0 (m\u00e9t)",
+    petrol_header: "So s\u00e1nh v\u1edbi x\u0103ng", petrol_price: "Gi\u00e1 x\u0103ng ($/L)", petrol_consumption: "M\u1ee9c ti\u00eau th\u1ee5 x\u0103ng (L/100km)",
+    save_settings: "L\u01b0u c\u00e0i \u0111\u1eb7t", saved: "\u0110\u00e3 l\u01b0u.", save_failed: "L\u01b0u th\u1ea5t b\u1ea1i \u2014 th\u1eed l\u1ea1i.",
+    invalid_numbers: "T\u1ea5t c\u1ea3 c\u00e1c tr\u01b0\u1eddng ph\u1ea3i l\u00e0 s\u1ed1 h\u1ee3p l\u1ec7, kh\u00f4ng \u00e2m.",
+    language_header: "Ng\u00f4n ng\u1eef", lang_en: "English", lang_vi: "Ti\u1ebfng Vi\u1ec7t",
+    passkey_title: "Nh\u1eadp m\u00e3 PIN", passkey_sub: "C\u1ea7n thi\u1ebft \u0111\u1ec3 ki\u1ec3m tra xe ho\u1eb7c ch\u1ec9nh s\u1eeda l\u01b0\u1ee3t s\u1ea1c.",
+    passkey_wrong: "Sai m\u00e3 PIN \u2014 th\u1eed l\u1ea1i.",
+    unlock: "M\u1edf kh\u00f3a",
+    polling_now: "\u0110ang ki\u1ec3m tra xe\u2026", waiting_response: "\u0110ang ch\u1edd xe ph\u1ea3n h\u1ed3i\u2026",
+    poll_failed: "Y\u00eau c\u1ea7u th\u1ea5t b\u1ea1i \u2014 th\u1eed l\u1ea1i.",
+    couldnt_load_ownership: "Kh\u00f4ng th\u1ec3 t\u1ea3i chi ph\u00ed s\u1edf h\u1eefu.",
+    enter_valid_amount_date: "Nh\u1eadp s\u1ed1 ti\u1ec1n v\u00e0 ng\u00e0y h\u1ee3p l\u1ec7.",
+    enter_valid_rate: "Nh\u1eadp m\u1ee9c gi\u00e1 h\u1ee3p l\u1ec7.",
+    saving: "\u0110ang l\u01b0u\u2026",
+    started: "B\u1eaft \u0111\u1ea7u", charging_speed: "T\u1ed1c \u0111\u1ed9 s\u1ea1c", elapsed: "Th\u1eddi gian tr\u00f4i qua",
+    energy_so_far: "N\u0103ng l\u01b0\u1ee3ng \u0111\u00e3 n\u1ea1p", cost_so_far: "Chi ph\u00ed hi\u1ec7n t\u1ea1i",
+    estimated_full_by: "D\u1ef1 ki\u1ebfn \u0111\u1ea7y l\u00fac", time_remaining: "Th\u1eddi gian c\u00f2n l\u1ea1i",
+    any_moment: "S\u1eafp xong",
+    insight_week_up: "B\u1ea1n t\u0103ng {pct}% so v\u1edbi tu\u1ea7n tr\u01b0\u1edbc ({a} so v\u1edbi {b}).",
+    insight_week_down: "B\u1ea1n gi\u1ea3m {pct}% so v\u1edbi tu\u1ea7n tr\u01b0\u1edbc ({a} so v\u1edbi {b}).",
+    insight_cheapest: "L\u01b0\u1ee3t s\u1ea1c r\u1ebb nh\u1ea5t: {cost} v\u00e0o {date}.",
+    insight_priciest: "L\u01b0\u1ee3t s\u1ea1c \u0111\u1eaft nh\u1ea5t: {cost} v\u00e0o {date}.",
+    insight_streak: "B\u1ea1n \u0111\u00e3 s\u1ea1c t\u1ea1i nh\u00e0 {n} l\u1ea7n li\u00ean ti\u1ebfp.",
+    insight_best_value: "L\u01b0\u1ee3t s\u1ea1c ti\u1ebft ki\u1ec7m nh\u1ea5t: {rate}\u00a2/km v\u00e0o {date}.",
+    fun_petrol_cost: "Trong {km} km \u0111\u00e3 theo d\u00f5i, m\u1ed9t xe x\u0103ng t\u01b0\u01a1ng \u0111\u01b0\u01a1ng s\u1ebd t\u1ed1n kho\u1ea3ng {cost} \u0111\u1ec3 v\u1eadn h\u00e0nh.",
+    fun_savings: "B\u1ea1n \u0111\u00e3 chi {spent} thay v\u00e0o \u0111\u00f3 \u2014 ti\u1ebft ki\u1ec7m kho\u1ea3ng {savings}, v\u00e0 tr\u00e1nh \u0111\u01b0\u1ee3c kho\u1ea3ng {co2} kg CO\u2082.",
+    fun_assumes: "Gi\u1ea3 \u0111\u1ecbnh {l} L/100km v\u1edbi gi\u00e1 {price}/L \u2014 ch\u1ec9 l\u00e0 so s\u00e1nh \u01b0\u1edbc l\u01b0\u1ee3ng, kh\u00f4ng ph\u1ea3i s\u1ed1 li\u1ec7u ch\u00ednh x\u00e1c.",
+    fun_empty: "L\u00e1i th\u00eam m\u1ed9t ch\u00fat v\u00e0 t\u00f4i s\u1ebd cho b\u1ea1n bi\u1ebft b\u1ea1n \u0111ang ti\u1ebft ki\u1ec7m \u0111\u01b0\u1ee3c bao nhi\u00eau so v\u1edbi x\u0103ng.",
+    min_ago: "{n} ph\u00fat tr\u01b0\u1edbc", hour_ago: "1 gi\u1edd tr\u01b0\u1edbc", hours_ago: "{n} gi\u1edd tr\u01b0\u1edbc",
+    duration_min: "{m} ph\u00fat", duration_hm: "{h} gi\u1edd {m} ph\u00fat",
+    not_charging_pct: "Kh\u00f4ng s\u1ea1c \u2014 pin {pct}%",
+    range_suffix: "Qu\u00e3ng \u0111\u01b0\u1eddng {km} km \u00b7 ",
+    charges_period_one: "{n} l\u01b0\u1ee3t s\u1ea1c trong k\u1ef3 n\u00e0y", charges_period_many: "{n} l\u01b0\u1ee3t s\u1ea1c trong k\u1ef3 n\u00e0y",
+    no_charges_period: "Kh\u00f4ng c\u00f3 l\u01b0\u1ee3t s\u1ea1c trong k\u1ef3 n\u00e0y",
+  },
+};
+
+let currentLang = localStorage.getItem('atto3_lang') || 'en';
+
+function t(key, vars) {
+  let str = (TRANSLATIONS[currentLang] && TRANSLATIONS[currentLang][key]) || TRANSLATIONS.en[key] || key;
+  if (vars) {
+    Object.keys(vars).forEach(k => { str = str.replace(`{${k}}`, vars[k]); });
+  }
+  return str;
+}
+
+function localeStr() { return currentLang === 'vi' ? 'vi-VN' : 'en-AU'; }
+
+function applyStaticTranslations() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+}
 const SUPABASE_KEY = "sb_publishable_MYvAXGlFH-AyOkGU-FceYg_THPLZqCy";
 
 const ICON_HOME = `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H9a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h2.5a1 1 0 0 0 1-1v-9"/></svg>`;
@@ -864,8 +1057,8 @@ async function sb(path) {
 const fmtMoney = (n) => n == null ? "—" : `$${Number(n).toFixed(2)}`;
 const fmtKwh = (n) => n == null ? "—" : `${Number(n).toFixed(1)} kWh`;
 const fmtKm = (n) => n == null ? "—" : `${Number(n).toFixed(0)} km`;
-const fmtDate = (iso) => new Date(iso).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
-const fmtTime = (iso) => new Date(iso).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' });
+const fmtDate = (iso) => new Date(iso).toLocaleDateString(localeStr(), { day: 'numeric', month: 'short' });
+const fmtTime = (iso) => new Date(iso).toLocaleTimeString(localeStr(), { hour: 'numeric', minute: '2-digit' });
 
 let allSessions = [];
 let activePeriod = 'weekly';
@@ -905,8 +1098,9 @@ function computeSummary(sessions) {
 
 function renderSummary(summary) {
   document.getElementById('total-spent').textContent = fmtMoney(summary.total_spent ?? 0);
-  document.getElementById('total-spent-sub').textContent =
-    summary.total_charges ? `${summary.total_charges} charge${summary.total_charges === 1 ? '' : 's'} this period` : 'No charges this period';
+  document.getElementById('total-spent-sub').textContent = summary.total_charges
+    ? t(summary.total_charges === 1 ? 'charges_period_one' : 'charges_period_many', { n: summary.total_charges })
+    : t('no_charges_period');
   document.getElementById('total-kwh').textContent = fmtKwh(summary.total_kwh);
   document.getElementById('hero-kwh').textContent = fmtKwh(summary.total_kwh);
   document.getElementById('total-km').textContent = fmtKm(summary.total_km_tracked);
@@ -930,13 +1124,13 @@ function renderSessions(sessions) {
   const done = sessions.filter(s => s.ended_at).slice(0, 5);
 
   if (done.length === 0) {
-    el.innerHTML = '<div class="empty">No completed charges yet — check back once the car finishes a charge.</div>';
+    el.innerHTML = `<div class="empty">${t('no_completed_charges')}</div>`;
     return;
   }
 
   el.innerHTML = done.map(s => {
     const isHome = s.location_type === 'home';
-    const placeLabel = isHome ? 'Home' : 'Public Charger';
+    const placeLabel = isHome ? t('home') : t('public_charger');
     const timeRange = `${fmtTime(s.started_at)}–${fmtTime(s.ended_at)}`;
     return `
       <a class="session" href="session.html?id=${s.id}">
@@ -956,17 +1150,17 @@ function renderSessions(sessions) {
 
 function relativeTime(iso) {
   const diffMin = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (diffMin < 1) return 'just now';
-  if (diffMin === 1) return '1 min ago';
-  if (diffMin < 60) return `${diffMin} min ago`;
+  if (diffMin < 1) return t('just_now');
+  if (diffMin === 1) return t('min_ago', { n: 1 });
+  if (diffMin < 60) return t('min_ago', { n: diffMin });
   const diffH = Math.round(diffMin / 60);
-  return diffH === 1 ? '1 hour ago' : `${diffH} hours ago`;
+  return diffH === 1 ? t('hour_ago') : t('hours_ago', { n: diffH });
 }
 
 function fmtElapsed(startIso) {
   const totalMin = Math.max(0, Math.round((Date.now() - new Date(startIso).getTime()) / 60000));
   const h = Math.floor(totalMin / 60), m = totalMin % 60;
-  return h === 0 ? `${m} min` : `${h}h ${m}min`;
+  return h === 0 ? t('duration_min', { m }) : t('duration_hm', { h, m });
 }
 
 // Mirrors poll.py's integrate_energy_kwh: trapezoidal between real readings,
@@ -995,44 +1189,44 @@ function fmtFullByDate(target) {
   const tomorrow = new Date(now);
   tomorrow.setDate(now.getDate() + 1);
   const isTomorrow = target.toDateString() === tomorrow.toDateString();
-  const timeStr = target.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' });
+  const timeStr = target.toLocaleTimeString(localeStr(), { hour: 'numeric', minute: '2-digit' });
   if (isToday) return `Today, ${timeStr}`;
   if (isTomorrow) return `Tomorrow, ${timeStr}`;
-  return `${target.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}, ${timeStr}`;
+  return `${target.toLocaleDateString(localeStr(), { weekday: 'short', day: 'numeric', month: 'short' })}, ${timeStr}`;
 }
 
 function fmtRemaining(target) {
   const ms = target - new Date();
-  if (ms <= 0) return 'Any moment';
+  if (ms <= 0) return t('any_moment');
   const totalMin = Math.round(ms / 60000);
   const h = Math.floor(totalMin / 60), m = totalMin % 60;
-  return h === 0 ? `${m} min` : `${h}h ${m}min`;
+  return h === 0 ? t('duration_min', { m }) : t('duration_hm', { h, m });
 }
 
 function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, batteryPct, lastUpdated, currentPowerKw) {
   const card = document.getElementById('status-card');
   card.classList.add('charging');
   const isHome = session.location_type === 'home';
-  const placeStr = appUnlocked ? (isHome ? 'Home' : 'Public Charger') : 'Charging';
+  const placeStr = appUnlocked ? (isHome ? t('home') : t('public_charger')) : t('charging_generic');
   const pctStr = (session.start_pct != null && batteryPct != null)
     ? `, ${session.start_pct}% \u2192 ${Math.round(batteryPct)}%`
     : (batteryPct != null ? `, ${Math.round(batteryPct)}%` : '');
   document.getElementById('status-title').textContent = appUnlocked
-    ? `Charging \u2014 ${placeStr}${pctStr}`
+    ? `${t('charging_generic')} \u2014 ${placeStr}${pctStr}`
     : `${placeStr}${pctStr}`;
-  document.getElementById('status-idle-detail').textContent = lastUpdated ? `Updated ${relativeTime(lastUpdated)}` : '';
+  document.getElementById('status-idle-detail').textContent = lastUpdated ? `${t('updated')} ${relativeTime(lastUpdated)}` : '';
 
   const grid = document.getElementById('status-grid');
   grid.style.display = 'grid';
   grid.innerHTML = `
-    <div class="status-stat"><div class="k">Started</div><div class="v">${fmtTime(session.started_at)}</div></div>
-    <div class="status-stat"><div class="k">Charging speed</div><div class="v">${currentPowerKw != null ? `${currentPowerKw.toFixed(1)} kW` : '—'}</div></div>
-    <div class="status-stat"><div class="k">Elapsed</div><div class="v">${fmtElapsed(session.started_at)}</div></div>
-    <div class="status-stat"><div class="k">Energy so far</div><div class="v">${fmtKwh(energyKwh)}</div></div>
-    <div class="status-stat"><div class="k">Cost so far</div><div class="v">${fmtMoney(costSoFar)}</div></div>
+    <div class="status-stat"><div class="k">${t('started')}</div><div class="v">${fmtTime(session.started_at)}</div></div>
+    <div class="status-stat"><div class="k">${t('charging_speed')}</div><div class="v">${currentPowerKw != null ? `${currentPowerKw.toFixed(1)} kW` : '—'}</div></div>
+    <div class="status-stat"><div class="k">${t('elapsed')}</div><div class="v">${fmtElapsed(session.started_at)}</div></div>
+    <div class="status-stat"><div class="k">${t('energy_so_far')}</div><div class="v">${fmtKwh(energyKwh)}</div></div>
+    <div class="status-stat"><div class="k">${t('cost_so_far')}</div><div class="v">${fmtMoney(costSoFar)}</div></div>
     ${fullByTarget ? `
-      <div class="status-stat"><div class="k">Estimated full by</div><div class="v">${fmtFullByDate(fullByTarget)}</div></div>
-      <div class="status-stat"><div class="k">Time remaining</div><div class="v">${fmtRemaining(fullByTarget)}</div></div>
+      <div class="status-stat"><div class="k">${t('estimated_full_by')}</div><div class="v">${fmtFullByDate(fullByTarget)}</div></div>
+      <div class="status-stat"><div class="k">${t('time_remaining')}</div><div class="v">${fmtRemaining(fullByTarget)}</div></div>
     ` : ''}
   `;
 }
@@ -1043,13 +1237,13 @@ function renderIdleStatus(snapshot) {
   document.getElementById('status-grid').style.display = 'none';
 
   if (!snapshot) {
-    document.getElementById('status-title').textContent = 'Not charging';
+    document.getElementById('status-title').textContent = t('not_charging');
     document.getElementById('status-idle-detail').textContent = '';
     return;
   }
-  document.getElementById('status-title').textContent = `Not charging \u2014 ${Math.round(snapshot.battery_pct)}% battery`;
-  const rangeStr = snapshot.range_km != null ? `${Math.round(snapshot.range_km)} km range \u00b7 ` : '';
-  document.getElementById('status-idle-detail').textContent = `${rangeStr}Updated ${relativeTime(snapshot.recorded_at)}`;
+  document.getElementById('status-title').textContent = t('not_charging_pct', { pct: Math.round(snapshot.battery_pct) });
+  const rangeStr = snapshot.range_km != null ? t('range_suffix', { km: Math.round(snapshot.range_km) }) : '';
+  document.getElementById('status-idle-detail').textContent = `${rangeStr}${t('updated')} ${relativeTime(snapshot.recorded_at)}`;
 }
 
 async function loadLiveStatus() {
@@ -1134,7 +1328,7 @@ function renderSpendChart(period) {
     });
     const keys = Object.keys(byMonth).sort().slice(-6); // last 6 months with data
     buckets = keys.map(k => ({
-      label: new Date(`${k}-01`).toLocaleDateString('en-AU', { month: 'short' }),
+      label: new Date(`${k}-01`).toLocaleDateString(localeStr(), { month: 'short' }),
       value: byMonth[k],
     }));
   } else {
@@ -1165,7 +1359,7 @@ function renderSpendChart(period) {
       const key = d.toDateString();
       const label = period === 'monthly'
         ? (i === 0 || (i + 1) % 5 === 0 || i === numDays - 1 ? String(d.getDate()) : '')
-        : d.toLocaleDateString('en-AU', { weekday: 'narrow' });
+        : d.toLocaleDateString(localeStr(), { weekday: 'narrow' });
       buckets.push({ label, value: byDay[key] || 0 });
     }
   }
@@ -1200,7 +1394,7 @@ async function renderPetrolFun(allDoneSessions) {
     const totalSpent = allDoneSessions.reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
 
     if (totalKm <= 0) {
-      el.innerHTML = '<div class="fun-line">Drive a bit more and I\'ll show you what you\'re saving vs petrol.</div>';
+      el.innerHTML = `<div class="fun-line">${t('fun_empty')}</div>`;
       return;
     }
 
@@ -1210,9 +1404,9 @@ async function renderPetrolFun(allDoneSessions) {
     const co2Kg = litresEquivalent * 2.31; // kg CO2 per litre of petrol, standard factor
 
     el.innerHTML = `
-      <div class="fun-line">Over <b>${totalKm.toFixed(0)} km</b> tracked, an equivalent petrol car would've cost about <b>${fmtMoney(petrolCost)}</b> to run.</div>
-      <div class="fun-line" style="margin-top:8px;">You spent <b>${fmtMoney(totalSpent)}</b> instead \u2014 roughly <b>${fmtMoney(savings)}</b> saved, and about <b>${co2Kg.toFixed(0)} kg</b> of CO\u2082 avoided.</div>
-      <div class="fun-note">Assumes ${settings.petrol_l_per_100km} L/100km at ${fmtMoney(settings.petrol_price_per_l)}/L \u2014 a rough comparison, not precise accounting.</div>
+      <div class="fun-line">${t('fun_petrol_cost', { km: `<b>${totalKm.toFixed(0)}</b>`, cost: `<b>${fmtMoney(petrolCost)}</b>` })}</div>
+      <div class="fun-line" style="margin-top:8px;">${t('fun_savings', { spent: `<b>${fmtMoney(totalSpent)}</b>`, savings: `<b>${fmtMoney(savings)}</b>`, co2: `<b>${co2Kg.toFixed(0)}</b>` })}</div>
+      <div class="fun-note">${t('fun_assumes', { l: settings.petrol_l_per_100km, price: fmtMoney(settings.petrol_price_per_l) })}</div>
     `;
   } catch (err) {
     el.innerHTML = '';
@@ -1239,7 +1433,9 @@ function computeInsights(sessions) {
   if (lastWeekSpend > 0) {
     const pctChange = ((thisWeekSpend - lastWeekSpend) / lastWeekSpend) * 100;
     if (Math.abs(pctChange) >= 5) {
-      insights.push(`You're ${pctChange > 0 ? 'up' : 'down'} ${Math.abs(pctChange).toFixed(0)}% vs last week (${fmtMoney(thisWeekSpend)} vs ${fmtMoney(lastWeekSpend)}).`);
+      insights.push(t(pctChange > 0 ? 'insight_week_up' : 'insight_week_down', {
+        pct: Math.abs(pctChange).toFixed(0), a: fmtMoney(thisWeekSpend), b: fmtMoney(lastWeekSpend),
+      }));
     }
   }
 
@@ -1247,8 +1443,8 @@ function computeInsights(sessions) {
   if (withCost.length >= 2) {
     const cheapest = withCost.reduce((a, b) => Number(b.cost) < Number(a.cost) ? b : a);
     const priciest = withCost.reduce((a, b) => Number(b.cost) > Number(a.cost) ? b : a);
-    insights.push(`Cheapest charge: ${fmtMoney(cheapest.cost)} on ${fmtDate(cheapest.started_at)}.`);
-    insights.push(`Priciest charge: ${fmtMoney(priciest.cost)} on ${fmtDate(priciest.started_at)}.`);
+    insights.push(t('insight_cheapest', { cost: fmtMoney(cheapest.cost), date: fmtDate(cheapest.started_at) }));
+    insights.push(t('insight_priciest', { cost: fmtMoney(priciest.cost), date: fmtDate(priciest.started_at) }));
   }
 
   let streak = 0;
@@ -1256,7 +1452,7 @@ function computeInsights(sessions) {
     if (s.location_type === 'home') streak++;
     else break;
   }
-  if (streak >= 3) insights.push(`You've charged at home ${streak} times in a row.`);
+  if (streak >= 3) insights.push(t('insight_streak', { n: streak }));
 
   const withKm = sessions.filter(s => Number(s.km_since_last_charge) > 0 && s.cost != null);
   if (withKm.length >= 2) {
@@ -1264,7 +1460,7 @@ function computeInsights(sessions) {
       (Number(b.cost) / Number(b.km_since_last_charge)) < (Number(a.cost) / Number(a.km_since_last_charge)) ? b : a
     );
     const centsPerKm = (Number(best.cost) / Number(best.km_since_last_charge)) * 100;
-    insights.push(`Best value charge: ${centsPerKm.toFixed(1)}\u00a2/km on ${fmtDate(best.started_at)}.`);
+    insights.push(t('insight_best_value', { rate: centsPerKm.toFixed(1), date: fmtDate(best.started_at) }));
   }
 
   return insights.slice(0, 4);
@@ -1274,7 +1470,7 @@ function renderInsights(sessions) {
   const el = document.getElementById('insights-card');
   const insights = computeInsights(sessions);
   if (insights.length === 0) {
-    el.innerHTML = '<div class="empty">Keep charging \u2014 insights will show up once there\'s enough history.</div>';
+    el.innerHTML = `<div class="empty">${t('insights_empty')}</div>`;
     return;
   }
   const bulbIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.5h6c0-1.1.4-1.9 1-2.5A6 6 0 0 0 12 2Z"/></svg>`;
@@ -1303,13 +1499,13 @@ async function renderBatteryHealth(sessions) {
     const rated = settingsRows[0]?.battery_capacity_kwh;
     const health = computeBatteryHealth(sessions, rated);
     if (!health) {
-      el.innerHTML = '<div class="empty">Need a few more charges with 15%+ gained to estimate battery health.</div>';
+      el.innerHTML = `<div class="empty">${t('battery_health_empty')}</div>`;
       return;
     }
     el.innerHTML = `
-      <div class="row"><span class="k">Estimated capacity</span><span class="v">${health.estimatedCapacity.toFixed(1)} kWh</span></div>
-      <div class="row"><span class="k">Rated capacity</span><span class="v">${Number(rated).toFixed(1)} kWh</span></div>
-      <div class="row"><span class="k">Health</span><span class="v">${health.healthPct != null ? health.healthPct.toFixed(0) + '%' : '\u2014'}</span></div>
+      <div class="row"><span class="k">${t('estimated_capacity')}</span><span class="v">${health.estimatedCapacity.toFixed(1)} kWh</span></div>
+      <div class="row"><span class="k">${t('rated_capacity')}</span><span class="v">${Number(rated).toFixed(1)} kWh</span></div>
+      <div class="row"><span class="k">${t('health')}</span><span class="v">${health.healthPct != null ? health.healthPct.toFixed(0) + '%' : '\u2014'}</span></div>
     `;
   } catch (err) {
     el.innerHTML = '';
@@ -1318,12 +1514,12 @@ async function renderBatteryHealth(sessions) {
 }
 
 // ---------- Cost of Ownership ----------
-const EXPENSE_CATEGORY_LABELS = {
-  registration: 'Registration',
-  insurance: 'Insurance',
-  tyres: 'Tyres',
-  servicing: 'Servicing',
-  other: 'Other',
+const EXPENSE_CATEGORY_KEYS = {
+  registration: 'cat_registration',
+  insurance: 'cat_insurance',
+  tyres: 'cat_tyres',
+  servicing: 'cat_servicing',
+  other: 'cat_other',
 };
 
 async function loadOwnership(allDoneSessions) {
@@ -1337,16 +1533,16 @@ async function loadOwnership(allDoneSessions) {
     const expenseTotal = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
     const grandTotal = chargingTotal + expenseTotal;
 
-    let rows = `<div class="row"><span class="k">Charging</span><span class="v">${fmtMoney(chargingTotal)}</span></div>`;
-    Object.keys(EXPENSE_CATEGORY_LABELS).forEach(cat => {
+    let rows = `<div class="row"><span class="k">${t('cat_charging')}</span><span class="v">${fmtMoney(chargingTotal)}</span></div>`;
+    Object.keys(EXPENSE_CATEGORY_KEYS).forEach(cat => {
       if (byCategory[cat]) {
-        rows += `<div class="row"><span class="k">${EXPENSE_CATEGORY_LABELS[cat]}</span><span class="v">${fmtMoney(byCategory[cat])}</span></div>`;
+        rows += `<div class="row"><span class="k">${t(EXPENSE_CATEGORY_KEYS[cat])}</span><span class="v">${fmtMoney(byCategory[cat])}</span></div>`;
       }
     });
-    rows += `<div class="row"><span class="k" style="font-weight:590;">Total</span><span class="v" style="color:var(--text); font-weight:700;">${fmtMoney(grandTotal)}</span></div>`;
+    rows += `<div class="row"><span class="k" style="font-weight:590;">${t('total')}</span><span class="v" style="color:var(--text); font-weight:700;">${fmtMoney(grandTotal)}</span></div>`;
     el.innerHTML = rows;
   } catch (err) {
-    el.innerHTML = '<div class="empty">Couldn\'t load ownership costs.</div>';
+    el.innerHTML = `<div class="empty">${t('couldnt_load_ownership')}</div>`;
     console.error('ownership load failed', err);
   }
 }
@@ -1375,7 +1571,7 @@ document.getElementById('expense-save-btn').addEventListener('click', async () =
   const notes = document.getElementById('expense-notes').value;
 
   if (isNaN(amount) || amount < 0 || !expense_date) {
-    status.textContent = 'Enter a valid amount and date.';
+    status.textContent = t('enter_valid_amount_date');
     status.classList.add('error');
     return;
   }
@@ -1383,7 +1579,7 @@ document.getElementById('expense-save-btn').addEventListener('click', async () =
   const passkey = await getPasskey();
   if (!passkey) return;
 
-  status.textContent = 'Saving\u2026';
+  status.textContent = t('saving');
   try {
     let res = await fetch(`${SUPABASE_URL}/functions/v1/add-expense`, {
       method: 'POST',
@@ -1392,7 +1588,7 @@ document.getElementById('expense-save-btn').addEventListener('click', async () =
     });
     if (res.status === 401) {
       clearStoredPasskey();
-      const retryKey = await getPasskey('Incorrect passkey \u2014 try again.');
+      const retryKey = await getPasskey(t('passkey_wrong'));
       if (!retryKey) { status.textContent = ''; return; }
       res = await fetch(`${SUPABASE_URL}/functions/v1/add-expense`, {
         method: 'POST',
@@ -1407,7 +1603,7 @@ document.getElementById('expense-save-btn').addEventListener('click', async () =
     status.textContent = '';
     await loadOwnership(allSessions);
   } catch (err) {
-    status.textContent = 'Failed to save \u2014 try again.';
+    status.textContent = t('save_failed');
     status.classList.add('error');
     console.error(err);
   }
@@ -1450,7 +1646,7 @@ async function revealLocation() {
 function renderLastChargeCard(mostRecent) {
   const el = document.getElementById('last-charge-card');
   if (!mostRecent) {
-    el.innerHTML = '<div class="empty">No charges recorded yet.</div>';
+    el.innerHTML = `<div class="empty">${t('no_charges_yet')}</div>`;
     return;
   }
   const isHome = mostRecent.location_type === 'home';
@@ -1459,7 +1655,7 @@ function renderLastChargeCard(mostRecent) {
       <div class="avatar ${isHome ? '' : 'public'}">${isHome ? ICON_HOME : ICON_PUBLIC}</div>
       <div class="last-charge-mid">
         <div class="last-charge-title">${mostRecent.start_pct}% \u2192 ${mostRecent.end_pct}%</div>
-        <div class="last-charge-sub">${fmtDate(mostRecent.started_at)} \u00b7 ${fmtKwh(mostRecent.energy_added_kwh)} \u00b7 ${isHome ? 'Home' : 'Public Charger'}</div>
+        <div class="last-charge-sub">${fmtDate(mostRecent.started_at)} \u00b7 ${fmtKwh(mostRecent.energy_added_kwh)} \u00b7 ${isHome ? t('home') : t('public_charger')}</div>
       </div>
       <div class="last-charge-cost">${fmtMoney(mostRecent.cost)}</div>
     </a>
@@ -1509,13 +1705,13 @@ function showPasskeyModal(errorMsg) {
     overlay.className = 'passkey-overlay';
     overlay.innerHTML = `
       <div class="passkey-sheet">
-        <div class="passkey-title">Enter Passkey</div>
-        <div class="passkey-sub">Required to poll the car or edit a charge.</div>
+        <div class="passkey-title">${t('passkey_title')}</div>
+        <div class="passkey-sub">${t('passkey_sub')}</div>
         <input type="password" inputmode="numeric" class="passkey-input" id="passkey-input" autocomplete="off">
         <div class="passkey-error">${errorMsg || ''}</div>
         <div class="passkey-actions">
-          <button class="passkey-cancel" id="passkey-cancel">Cancel</button>
-          <button class="passkey-submit" id="passkey-submit">Unlock</button>
+          <button class="passkey-cancel" id="passkey-cancel">${t('cancel')}</button>
+          <button class="passkey-submit" id="passkey-submit">${t('unlock')}</button>
         </div>
       </div>
     `;
@@ -1554,7 +1750,7 @@ const TRIGGER_URL = `${SUPABASE_URL}/functions/v1/trigger-poll`;
 
 async function doPollNow(passkey) {
   pollNowBtn.classList.add('polling');
-  pushStatus.textContent = 'Polling the car now\u2026';
+  pushStatus.textContent = t('polling_now');
   try {
     const res = await fetch(TRIGGER_URL, {
       method: 'POST',
@@ -1564,7 +1760,7 @@ async function doPollNow(passkey) {
     if (res.status === 401) {
       clearStoredPasskey();
       pollNowBtn.classList.remove('polling');
-      const retryKey = await getPasskey('Incorrect passkey \u2014 try again.');
+      const retryKey = await getPasskey(t('passkey_wrong'));
       if (retryKey) await doPollNow(retryKey);
       else pushStatus.textContent = '';
       return;
@@ -1575,12 +1771,12 @@ async function doPollNow(passkey) {
     // The GitHub Actions run itself takes ~15-20s to check out, install
     // deps, and reach the car -- there's nothing to refresh yet the
     // instant this call returns, so wait before pulling fresh data.
-    pushStatus.textContent = 'Waiting for the car to respond\u2026';
+    pushStatus.textContent = t('waiting_response');
     await new Promise(r => setTimeout(r, 20000));
     await load();
-    pushStatus.textContent = `Updated ${new Date().toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}`;
+    pushStatus.textContent = `Updated ${new Date().toLocaleTimeString(localeStr(), { hour: 'numeric', minute: '2-digit' })}`;
   } catch (err) {
-    pushStatus.textContent = 'Poll request failed \u2014 try again.';
+    pushStatus.textContent = t('poll_failed');
     console.error(err);
   } finally {
     pollNowBtn.classList.remove('polling');
@@ -1618,7 +1814,7 @@ async function unlockApp() {
   let ok = await verifyPasskeyServer(passkey);
   if (!ok) {
     clearStoredPasskey();
-    const retryKey = await getPasskey('Incorrect passkey \u2014 try again.');
+    const retryKey = await getPasskey(t('passkey_wrong'));
     if (!retryKey) return false;
     ok = await verifyPasskeyServer(retryKey);
     if (!ok) { clearStoredPasskey(); return false; }
@@ -1649,7 +1845,7 @@ document.getElementById('location-unlock-btn').addEventListener('click', unlockA
 document.getElementById('settings-save-btn').addEventListener('click', async () => {
   const status = document.getElementById('settings-status');
   status.classList.remove('error');
-  status.textContent = 'Saving\u2026';
+  status.textContent = t('saving');
 
   const payload = {
     home_rate_per_kwh: parseFloat(document.getElementById('s-home-rate').value),
@@ -1660,7 +1856,7 @@ document.getElementById('settings-save-btn').addEventListener('click', async () 
     petrol_l_per_100km: parseFloat(document.getElementById('s-petrol-consumption').value),
   };
   if (Object.values(payload).some(v => isNaN(v) || v < 0)) {
-    status.textContent = 'All fields must be valid, non-negative numbers.';
+    status.textContent = t('invalid_numbers');
     status.classList.add('error');
     return;
   }
@@ -1676,7 +1872,7 @@ document.getElementById('settings-save-btn').addEventListener('click', async () 
     });
     if (res.status === 401) {
       clearStoredPasskey();
-      const retryKey = await getPasskey('Incorrect passkey \u2014 try again.');
+      const retryKey = await getPasskey(t('passkey_wrong'));
       if (!retryKey) { status.textContent = ''; return; }
       res = await fetch(`${SUPABASE_URL}/functions/v1/edit-settings`, {
         method: 'POST',
@@ -1685,13 +1881,34 @@ document.getElementById('settings-save-btn').addEventListener('click', async () 
       });
     }
     if (!res.ok) throw new Error('save failed');
-    status.textContent = 'Saved.';
+    status.textContent = t('saved');
     setTimeout(() => { status.textContent = ''; }, 4000);
   } catch (err) {
-    status.textContent = 'Failed to save \u2014 try again.';
+    status.textContent = t('save_failed');
     status.classList.add('error');
     console.error(err);
   }
+});
+
+function setLanguage(lang) {
+  currentLang = lang;
+  localStorage.setItem('atto3_lang', lang);
+  document.querySelectorAll('#lang-tabs button').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.lang === lang);
+  });
+  applyStaticTranslations();
+  load(); // re-render all dynamic text in the new language
+}
+
+document.getElementById('lang-tabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  setLanguage(btn.dataset.lang);
+});
+
+applyStaticTranslations();
+document.querySelectorAll('#lang-tabs button').forEach(btn => {
+  btn.classList.toggle('active', btn.dataset.lang === currentLang);
 });
 
 const TAB_STORAGE_KEY = 'atto3_active_tab';
