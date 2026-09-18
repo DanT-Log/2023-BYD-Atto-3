@@ -593,7 +593,12 @@ async function loadLiveStatus() {
         const anchor = new Date(withFullTime.recorded_at);
         const target = new Date(anchor);
         target.setHours(withFullTime.full_hour, withFullTime.full_minute, 0, 0);
-        if (target <= anchor) target.setDate(target.getDate() + 1);
+        // Only treat this as "must mean tomorrow" if the target trails the
+        // anchor by more than an hour -- a lag of a few minutes is just
+        // measurement noise from the field as the charge nears completion,
+        // not a genuine overnight wraparound.
+        const lagMinutes = (anchor - target) / 60000;
+        if (lagMinutes > 60) target.setDate(target.getDate() + 1);
         fullByTarget = target;
       }
 
