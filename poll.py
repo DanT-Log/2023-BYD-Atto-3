@@ -192,6 +192,7 @@ def notify_charge_finished(
     session_id: int,
 ) -> None:
     if not NTFY_TOPIC:
+        print("notify skipped: NTFY_TOPIC is not set", file=sys.stderr)
         return
 
     pct_str = f"{start_pct}% \u2192 {end_pct}%" if (start_pct is not None and end_pct is not None) else "unknown %"
@@ -205,7 +206,7 @@ def notify_charge_finished(
         message += f" Rate is a default estimate \u2014 reply to Claude to set the real rate for session #{session_id}."
 
     try:
-        requests.post(
+        resp = requests.post(
             f"https://ntfy.sh/{NTFY_TOPIC}",
             data=message.encode("utf-8"),
             headers={
@@ -214,6 +215,7 @@ def notify_charge_finished(
             },
             timeout=10,
         )
+        print(f"ntfy notification sent: status={resp.status_code}")
     except Exception as exc:  # noqa: BLE001 - notification failure shouldn't break the poll
         print(f"warning: ntfy notification failed: {exc}", file=sys.stderr)
 
