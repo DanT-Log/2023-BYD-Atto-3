@@ -108,6 +108,10 @@
   /* Hero: Wallet-pass style card */
   .hero{
     position: relative;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
     border-radius: 20px;
     padding: 22px 22px 24px;
     background: linear-gradient(150deg, var(--green) 0%, var(--green-2) 55%, #1F8F3E 100%);
@@ -118,6 +122,21 @@
     transform: translateY(6px) scale(0.99);
     animation: hero-in .55s cubic-bezier(.2,.9,.3,1) .05s forwards;
   }
+  .hero-main{ min-width: 0; }
+  .hero-side{
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+  }
+  .hero-bolt{
+    width: 22px; height: 22px;
+    opacity: 0.5;
+  }
+  .hero-side-stat{ text-align: right; }
+  .hero-side-k{ font-size: 11.5px; opacity: 0.75; }
+  .hero-side-v{ font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 1px; }
   @keyframes hero-in{ to{ opacity: 1; transform: translateY(0) scale(1); } }
   .hero::after{
     content: "";
@@ -485,9 +504,18 @@
     <div class="footnote">Updates automatically as the car reports new data. Tap a charge for full details.</div>
 
     <div class="hero">
-      <div class="hero-label">Total spent charging</div>
-      <div class="hero-amount" id="total-spent">$0.00</div>
-      <div class="hero-sub" id="total-spent-sub">loading…</div>
+      <div class="hero-main">
+        <div class="hero-label">Total spent charging</div>
+        <div class="hero-amount" id="total-spent">$0.00</div>
+        <div class="hero-sub" id="total-spent-sub">loading…</div>
+      </div>
+      <div class="hero-side">
+        <svg viewBox="0 0 24 24" fill="currentColor" class="hero-bolt"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
+        <div class="hero-side-stat">
+          <div class="hero-side-k">Energy</div>
+          <div class="hero-side-v" id="hero-kwh">—</div>
+        </div>
+      </div>
     </div>
 
     <div class="group fun-group">
@@ -558,6 +586,7 @@ function renderSummary(summary) {
   document.getElementById('total-spent-sub').textContent =
     summary.total_charges ? `${summary.total_charges} charge${summary.total_charges === 1 ? '' : 's'} this period` : 'No charges this period';
   document.getElementById('total-kwh').textContent = fmtKwh(summary.total_kwh);
+  document.getElementById('hero-kwh').textContent = fmtKwh(summary.total_kwh);
   document.getElementById('total-km').textContent = fmtKm(summary.total_km_tracked);
   document.getElementById('avg-per-km').textContent = summary.avg_cost_per_km != null ? `${(summary.avg_cost_per_km * 100).toFixed(1)}¢` : '—';
   document.getElementById('avg-per-kwh').textContent = fmtMoney(summary.avg_cost_per_kwh);
