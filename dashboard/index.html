@@ -311,6 +311,56 @@
   .ptr-indicator.spinning svg{ animation: ptr-spin 0.7s linear infinite; }
   @keyframes ptr-spin{ to{ transform: rotate(360deg); } }
 
+  .passkey-overlay{
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 100;
+    animation: pk-fade .2s ease;
+  }
+  @keyframes pk-fade{ from{ opacity: 0; } to{ opacity: 1; } }
+  .passkey-sheet{
+    width: 100%;
+    max-width: 480px;
+    background: var(--card);
+    border-radius: 20px 20px 0 0;
+    padding: 20px 20px calc(24px + env(safe-area-inset-bottom));
+    animation: pk-rise .25s cubic-bezier(.2,.9,.3,1);
+  }
+  @keyframes pk-rise{ from{ transform: translateY(100%); } to{ transform: translateY(0); } }
+  .passkey-title{ font-size: 17px; font-weight: 600; margin-bottom: 4px; }
+  .passkey-sub{ font-size: 13px; color: var(--text-secondary); margin-bottom: 14px; }
+  .passkey-input{
+    width: 100%;
+    font-family: inherit;
+    font-size: 20px;
+    letter-spacing: 0.1em;
+    text-align: center;
+    padding: 12px;
+    border-radius: 10px;
+    border: 0.5px solid var(--hairline);
+    background: var(--bg);
+    color: var(--text);
+    margin-bottom: 14px;
+  }
+  .passkey-error{ font-size: 13px; color: var(--orange); text-align: center; margin: -6px 0 12px; min-height: 16px; }
+  .passkey-actions{ display: flex; gap: 10px; }
+  .passkey-cancel, .passkey-submit{
+    flex: 1;
+    padding: 12px;
+    border-radius: 10px;
+    border: none;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 590;
+    cursor: pointer;
+  }
+  .passkey-submit{ background: var(--blue); color: #fff; }
+  .passkey-cancel{ background: rgba(118,118,128,0.16); color: var(--text); }
+
   .footnote{
     margin-top: 24px;
     padding: 0 16px;
@@ -692,16 +742,74 @@ refreshBtn.addEventListener('click', async () => {
   setTimeout(() => refreshBtn.classList.remove('spinning'), 600);
 });
 
+const PASSKEY_STORAGE_KEY = 'atto3_passkey';
+
+function showPasskeyModal(errorMsg) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'passkey-overlay';
+    overlay.innerHTML = `
+      <div class="passkey-sheet">
+        <div class="passkey-title">Enter Passkey</div>
+        <div class="passkey-sub">Required to poll the car or edit a charge.</div>
+        <input type="password" inputmode="numeric" class="passkey-input" id="passkey-input" autocomplete="off">
+        <div class="passkey-error">${errorMsg || ''}</div>
+        <div class="passkey-actions">
+          <button class="passkey-cancel" id="passkey-cancel">Cancel</button>
+          <button class="passkey-submit" id="passkey-submit">Unlock</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const input = overlay.querySelector('#passkey-input');
+    setTimeout(() => input.focus(), 50);
+
+    const cleanup = (value) => { overlay.remove(); resolve(value); };
+    overlay.querySelector('#passkey-cancel').addEventListener('click', () => cleanup(null));
+    overlay.querySelector('#passkey-submit').addEventListener('click', () => cleanup(input.value || null));
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') cleanup(input.value || null); });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) cleanup(null); });
+  });
+}
+
+// Returns a passkey (from local storage if already unlocked, otherwise by
+// prompting), or null if the user cancels. The server re-validates it on
+// every call regardless -- this is just convenience so you're not
+// re-prompted constantly, not the actual security boundary.
+async function getPasskey(errorMsg) {
+  const stored = localStorage.getItem(PASSKEY_STORAGE_KEY);
+  if (stored && !errorMsg) return stored;
+  const entered = await showPasskeyModal(errorMsg);
+  if (!entered) return null;
+  localStorage.setItem(PASSKEY_STORAGE_KEY, entered);
+  return entered;
+}
+
+function clearStoredPasskey() {
+  localStorage.removeItem(PASSKEY_STORAGE_KEY);
+}
+
 const pollNowBtn = document.getElementById('poll-now-btn');
 const pushStatus = document.getElementById('push-status');
 const TRIGGER_URL = `${SUPABASE_URL}/functions/v1/trigger-poll`;
 
-pollNowBtn.addEventListener('click', async () => {
-  if (pollNowBtn.classList.contains('polling')) return;
+async function doPollNow(passkey) {
   pollNowBtn.classList.add('polling');
   pushStatus.textContent = 'Polling the car now\u2026';
   try {
-    const res = await fetch(TRIGGER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const res = await fetch(TRIGGER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passkey }),
+    });
+    if (res.status === 401) {
+      clearStoredPasskey();
+      pollNowBtn.classList.remove('polling');
+      const retryKey = await getPasskey('Incorrect passkey \u2014 try again.');
+      if (retryKey) await doPollNow(retryKey);
+      else pushStatus.textContent = '';
+      return;
+    }
     const data = await res.json();
     if (!data.triggered) throw new Error('trigger failed');
 
@@ -719,6 +827,13 @@ pollNowBtn.addEventListener('click', async () => {
     pollNowBtn.classList.remove('polling');
     setTimeout(() => { pushStatus.textContent = ''; }, 6000);
   }
+}
+
+pollNowBtn.addEventListener('click', async () => {
+  if (pollNowBtn.classList.contains('polling')) return;
+  const passkey = await getPasskey();
+  if (!passkey) return;
+  await doPollNow(passkey);
 });
 
 load();
