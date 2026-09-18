@@ -1014,7 +1014,9 @@ function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, batte
   card.classList.add('charging');
   const isHome = session.location_type === 'home';
   const placeStr = appUnlocked ? (isHome ? 'Home' : 'Public Charger') : 'Charging';
-  const pctStr = batteryPct != null ? `, ${Math.round(batteryPct)}%` : '';
+  const pctStr = (session.start_pct != null && batteryPct != null)
+    ? `, ${session.start_pct}% \u2192 ${Math.round(batteryPct)}%`
+    : (batteryPct != null ? `, ${Math.round(batteryPct)}%` : '');
   document.getElementById('status-title').textContent = appUnlocked
     ? `Charging \u2014 ${placeStr}${pctStr}`
     : `${placeStr}${pctStr}`;
