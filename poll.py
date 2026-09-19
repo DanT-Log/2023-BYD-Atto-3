@@ -319,11 +319,32 @@ async def fetch_vehicle_state() -> dict:
         }
 
 
+PARKED_THROTTLE_MINUTES = 30  # matches the "parked -> slow down" adaptive polling idea
+
+
+def should_throttle(prev_snapshot: dict | None) -> bool:
+    """Returns True if the car was last seen parked (not charging) and it's
+    too soon to check again. Skipping the actual BYD API call while parked
+    reduces how often we wake the car's systems, without needing to change
+    the underlying 5-minute pg_cron trigger -- it just becomes a no-op most
+    of the time while parked, and always does a real check while charging
+    (so charge-stop detection stays prompt).
+    """
+    if prev_snapshot is None or prev_snapshot.get("is_charging"):
+        return False
+    elapsed_min = (datetime.now(timezone.utc) - parse_ts(prev_snapshot["recorded_at"])).total_seconds() / 60
+    return elapsed_min < PARKED_THROTTLE_MINUTES
+
+
 def main() -> None:
+    prev_snapshot = get_last_snapshot()
+    if should_throttle(prev_snapshot):
+        print(f"throttled: parked, last checked {prev_snapshot['recorded_at']}, skipping this run")
+        return
+
     state = asyncio.run(fetch_vehicle_state())
     now = datetime.now(timezone.utc).isoformat()
 
-    prev_snapshot = get_last_snapshot()
     prev_is_charging = bool(prev_snapshot["is_charging"]) if prev_snapshot else None
 
     # Always record the snapshot, regardless of transition.
