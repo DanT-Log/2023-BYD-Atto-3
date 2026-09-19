@@ -276,6 +276,21 @@
   .passkey-submit{ background: var(--blue); color: #fff; }
   .passkey-cancel{ background: rgba(118,118,128,0.16); color: var(--text); }
 
+  .chart-card{
+    background: var(--card);
+    border-radius: 14px;
+    box-shadow: var(--card-shadow);
+    padding: 16px 16px 8px;
+  }
+  .curve-axis-label{ font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
+  .curve-x-labels{
+    display: flex;
+    justify-content: space-between;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
   .loading, .not-found{
     padding: 60px 16px;
     text-align: center;
@@ -354,6 +369,19 @@ function render(s) {
         <div class="row"><span class="k">Battery</span><span class="v">${s.start_pct}% → ${s.end_pct}%</span></div>
         <div class="row"><span class="k">Range added</span><span class="v">${s.range_added_km != null ? `+${Number(s.range_added_km).toFixed(0)} km` : '—'}</span></div>
         <div class="row"><span class="k">Energy added</span><span class="v">${fmtKwh(s.energy_added_kwh)}</span></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-header">Charging Power</div>
+      <div class="group-card">
+        <div class="row"><span class="k">Peak power</span><span class="v" id="peak-kw">—</span></div>
+        <div class="row"><span class="k">Average power</span><span class="v" id="avg-kw">—</span></div>
+      </div>
+      <div class="chart-card" style="margin-top:10px;">
+        <div class="curve-axis-label" id="curve-y-label">kW</div>
+        <svg id="charge-curve-chart" width="100%" height="90" viewBox="0 0 860 90" preserveAspectRatio="none"></svg>
+        <div class="curve-x-labels" id="curve-x-labels"></div>
       </div>
     </div>
 
@@ -517,6 +545,48 @@ function wireEditControls(s) {
   });
 }
 
+async function loadChargingCurve(s) {
+  const endTime = s.ended_at || new Date().toISOString();
+  const snapshots = await sb(`vehicle_snapshots?recorded_at=gte.${encodeURIComponent(s.started_at)}&recorded_at=lte.${encodeURIComponent(endTime)}&select=recorded_at,battery_pct,charging_power_kw&order=recorded_at.asc`);
+  const usable = snapshots.filter(sn => sn.charging_power_kw != null && sn.battery_pct != null);
+
+  if (usable.length === 0) return;
+
+  const powers = usable.map(sn => Number(sn.charging_power_kw));
+  const peak = Math.max(...powers);
+  const avg = powers.reduce((a, b) => a + b, 0) / powers.length;
+  document.getElementById('peak-kw').textContent = `${peak.toFixed(1)} kW`;
+  document.getElementById('avg-kw').textContent = `${avg.toFixed(1)} kW`;
+
+  const pcts = usable.map(sn => Number(sn.battery_pct));
+  const minPct = Math.min(...pcts), maxPct = Math.max(...pcts);
+  const pctRange = Math.max(maxPct - minPct, 1);
+  const maxPower = Math.max(peak, 0.1);
+
+  const w = 860, h = 90, pad = 6;
+  const points = usable.map(sn => {
+    const x = pad + ((Number(sn.battery_pct) - minPct) / pctRange) * (w - pad * 2);
+    const y = h - pad - (Number(sn.charging_power_kw) / maxPower) * (h - pad * 2);
+    return [x, y];
+  });
+  const path = points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const area = `${path} L${points[points.length - 1][0].toFixed(1)},${h} L${points[0][0].toFixed(1)},${h} Z`;
+  const accent = window.matchMedia('(prefers-color-scheme: dark)').matches ? '#0A84FF' : '#007AFF';
+
+  document.getElementById('charge-curve-chart').innerHTML = `
+    <defs>
+      <linearGradient id="curveFade" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${accent}" stop-opacity="0.2"/>
+        <stop offset="100%" stop-color="${accent}" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <path d="${area}" fill="url(#curveFade)"/>
+    <path d="${path}" fill="none" stroke="${accent}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  `;
+  document.getElementById('curve-y-label').textContent = `kW (peak ${peak.toFixed(1)})`;
+  document.getElementById('curve-x-labels').innerHTML = `<span>${minPct}% SOC</span><span>${maxPct}% SOC</span>`;
+}
+
 async function load() {
   const params = new URLSearchParams(window.location.search);
   const id = params.get('id');
@@ -532,6 +602,7 @@ async function load() {
     }
     render(rows[0]);
     wireEditControls(rows[0]);
+    await loadChargingCurve(rows[0]);
   } catch (err) {
     document.getElementById('content').innerHTML = '<div class="not-found">Failed to load this charge.</div>';
     console.error(err);

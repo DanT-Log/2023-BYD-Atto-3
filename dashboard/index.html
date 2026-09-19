@@ -386,6 +386,65 @@
   .edit-status{ font-size: 13px; color: var(--text-secondary); margin-top: 10px; text-align: center; }
   .edit-status.error{ color: var(--orange); }
 
+  .record-row{
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 0.5px solid var(--hairline);
+  }
+  .record-row:last-child{ border-bottom: none; }
+  .record-emoji{ font-size: 18px; flex-shrink: 0; width: 22px; text-align: center; }
+  .record-mid{ flex: 1; min-width: 0; }
+  .record-label{ font-size: 13px; color: var(--text-secondary); }
+  .record-value{ font-size: 15px; font-weight: 590; margin-top: 1px; }
+  .record-date{ font-size: 12px; color: var(--text-secondary); }
+
+  .v2l-row{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    border-bottom: 0.5px solid var(--hairline);
+  }
+  .v2l-row input[type="text"]{
+    flex: 1;
+    border: none;
+    background: none;
+    font-family: inherit;
+    font-size: 15px;
+    color: var(--text);
+    padding: 4px 0;
+  }
+  .v2l-row input[type="number"]{
+    width: 64px;
+    text-align: right;
+    font-family: inherit;
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+    padding: 6px 8px;
+    border-radius: 8px;
+    border: 0.5px solid var(--hairline);
+    background: var(--bg);
+    color: var(--text);
+  }
+  .v2l-row .unit{ font-size: 13px; color: var(--text-secondary); }
+  .v2l-remove{
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(118,118,128,0.16);
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .v2l-total{ font-size: 15px; font-weight: 700; }
+  .v2l-runtime{ font-size: 22px; font-weight: 700; margin-top: 2px; }
+  .v2l-note{ font-size: 12px; color: var(--text-secondary); margin-top: 8px; line-height: 1.4; }
+  .v2l-warning{ color: var(--orange); font-weight: 590; }
+
   .insight-row{
     display: flex;
     align-items: flex-start;
@@ -791,6 +850,11 @@
       </div>
 
       <div class="group">
+        <div class="group-header" data-i18n="records_header">Atto Records</div>
+        <div class="group-card" id="records-card"></div>
+      </div>
+
+      <div class="group">
         <div class="group-header" data-i18n="insights_header">Insights</div>
         <div class="group-card" id="insights-card"></div>
       </div>
@@ -798,6 +862,15 @@
       <div class="group fun-group">
         <div class="group-header" data-i18n="fun_header">Just For Fun</div>
         <div class="group-card fun-card" id="petrol-fun"></div>
+      </div>
+
+      <div class="group">
+        <div class="group-header" data-i18n="v2l_header">V2L Calculator</div>
+        <div class="group-card">
+          <div id="v2l-appliances"></div>
+          <button class="edit-link" id="v2l-add-btn" data-i18n="v2l_add_appliance" style="padding-left:16px;">+ Add appliance</button>
+        </div>
+        <div class="group-card" id="v2l-result" style="margin-top:10px; padding:14px 16px;"></div>
       </div>
     </div>
 
@@ -950,6 +1023,21 @@ const TRANSLATIONS = {
     enter_valid_amount_date: "Enter a valid amount and date.",
     enter_valid_rate: "Enter a valid rate.",
     saving: "Saving\u2026",
+    driven_since_prev: "driven since prev.",
+    records_header: "Atto Records",
+    record_longest: "Longest charge",
+    record_biggest: "Biggest energy added",
+    record_cheapest: "Cheapest charge",
+    record_peak_power: "Highest charging power",
+    record_best_month: "Most km in a month",
+    records_empty: "Charge a bit more to start setting records.",
+    v2l_header: "V2L Calculator",
+    v2l_add_appliance: "+ Add appliance",
+    v2l_estimated_runtime: "Estimated runtime",
+    v2l_total_load: "Total load",
+    v2l_note: "Estimate only. Assumes 15% minimum battery reserve (per BYD's own guidance) and ~90% inverter efficiency. Actual runtime will vary.",
+    v2l_exceeds: "This exceeds the Atto 3's rated V2L output (~2.2\u20133.3 kW) \u2014 it may not be able to sustain this load.",
+    v2l_no_battery_data: "Couldn't load current battery level.",
     chart_readout_hint: "Tap a bar for details",
     chart_readout_value: "{date}: {amount}",
     started: "Started", charging_speed: "Charging speed", elapsed: "Elapsed",
@@ -1038,6 +1126,21 @@ const TRANSLATIONS = {
     enter_valid_amount_date: "Nh\u1eadp s\u1ed1 ti\u1ec1n v\u00e0 ng\u00e0y h\u1ee3p l\u1ec7.",
     enter_valid_rate: "Nh\u1eadp m\u1ee9c gi\u00e1 h\u1ee3p l\u1ec7.",
     saving: "\u0110ang l\u01b0u\u2026",
+    driven_since_prev: "\u0111\u00e3 l\u00e1i t\u1eeb l\u1ea7n tr\u01b0\u1edbc",
+    records_header: "K\u1ef7 l\u1ee5c Atto",
+    record_longest: "L\u01b0\u1ee3t s\u1ea1c l\u00e2u nh\u1ea5t",
+    record_biggest: "N\u0103ng l\u01b0\u1ee3ng n\u1ea1p nhi\u1ec1u nh\u1ea5t",
+    record_cheapest: "L\u01b0\u1ee3t s\u1ea1c r\u1ebb nh\u1ea5t",
+    record_peak_power: "C\u00f4ng su\u1ea5t s\u1ea1c cao nh\u1ea5t",
+    record_best_month: "Nhi\u1ec1u km nh\u1ea5t trong 1 th\u00e1ng",
+    records_empty: "S\u1ea1c th\u00eam m\u1ed9t ch\u00fat \u0111\u1ec3 b\u1eaft \u0111\u1ea7u thi\u1ebft l\u1eadp k\u1ef7 l\u1ee5c.",
+    v2l_header: "T\u00ednh V2L",
+    v2l_add_appliance: "+ Th\u00eam thi\u1ebft b\u1ecb",
+    v2l_estimated_runtime: "Th\u1eddi gian \u01b0\u1edbc t\u00ednh",
+    v2l_total_load: "T\u1ed5ng c\u00f4ng su\u1ea5t",
+    v2l_note: "Ch\u1ec9 l\u00e0 \u01b0\u1edbc t\u00ednh. Gi\u1ea3 \u0111\u1ecbnh gi\u1eef l\u1ea1i t\u1ed1i thi\u1ec3u 15% pin (theo khuy\u1ebfn c\u00e1o c\u1ee7a BYD) v\u00e0 hi\u1ec7u su\u1ea5t bi\u1ebfn t\u1ea7n \u2248 90%. Th\u1eddi gian th\u1ef1c t\u1ebf c\u00f3 th\u1ec3 kh\u00e1c.",
+    v2l_exceeds: "V\u01b0\u1ee3t qu\u00e1 c\u00f4ng su\u1ea5t V2L \u0111\u1ecbnh m\u1ee9c c\u1ee7a Atto 3 (~2.2\u20133.3 kW) \u2014 xe c\u00f3 th\u1ec3 kh\u00f4ng duy tr\u00ec \u0111\u01b0\u1ee3c t\u1ea3i n\u00e0y.",
+    v2l_no_battery_data: "Kh\u00f4ng th\u1ec3 t\u1ea3i m\u1ee9c pin hi\u1ec7n t\u1ea1i.",
     chart_readout_hint: "Nh\u1ea5n v\u00e0o m\u1ed9t c\u1ed9t \u0111\u1ec3 xem chi ti\u1ebft",
     chart_readout_value: "{date}: {amount}",
     started: "B\u1eaft \u0111\u1ea7u", charging_speed: "T\u1ed1c \u0111\u1ed9 s\u1ea1c", elapsed: "Th\u1eddi gian tr\u00f4i qua",
@@ -1530,6 +1633,151 @@ function computeInsights(sessions) {
   return insights.slice(0, 4);
 }
 
+// ---------- Personal Records ----------
+async function renderRecords(sessions) {
+  const el = document.getElementById('records-card');
+  const withCost = sessions.filter(s => s.cost != null && s.ended_at);
+  if (withCost.length === 0) {
+    el.innerHTML = `<div class="empty">${t('records_empty')}</div>`;
+    return;
+  }
+
+  const records = [];
+
+  const longest = withCost.reduce((a, b) =>
+    (new Date(b.ended_at) - new Date(b.started_at)) > (new Date(a.ended_at) - new Date(a.started_at)) ? b : a
+  );
+  const longestMin = Math.round((new Date(longest.ended_at) - new Date(longest.started_at)) / 60000);
+  const longestH = Math.floor(longestMin / 60), longestM = longestMin % 60;
+  records.push({ emoji: '\ud83c\udfc6', key: 'record_longest', value: `${longestH}h ${longestM}min`, date: fmtDate(longest.started_at), id: longest.id });
+
+  const biggest = withCost.reduce((a, b) => (Number(b.energy_added_kwh) || 0) > (Number(a.energy_added_kwh) || 0) ? b : a);
+  records.push({ emoji: '\u26a1', key: 'record_biggest', value: fmtKwh(biggest.energy_added_kwh), date: fmtDate(biggest.started_at), id: biggest.id });
+
+  const cheapest = withCost.reduce((a, b) => Number(b.cost) < Number(a.cost) ? b : a);
+  records.push({ emoji: '\ud83d\udcb0', key: 'record_cheapest', value: fmtMoney(cheapest.cost), date: fmtDate(cheapest.started_at), id: cheapest.id });
+
+  try {
+    const peakRows = await sb('vehicle_snapshots?charging_power_kw=not.is.null&select=charging_power_kw,recorded_at&order=charging_power_kw.desc&limit=1');
+    if (peakRows.length) {
+      records.push({ emoji: '\ud83d\ude80', key: 'record_peak_power', value: `${Number(peakRows[0].charging_power_kw).toFixed(1)} kW`, date: fmtDate(peakRows[0].recorded_at), id: null });
+    }
+  } catch (err) { console.error('peak power record failed', err); }
+
+  const byMonth = {};
+  withCost.forEach(s => {
+    if (s.km_since_last_charge == null) return;
+    const d = new Date(s.started_at);
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    byMonth[key] = (byMonth[key] || 0) + Number(s.km_since_last_charge);
+  });
+  const monthEntries = Object.entries(byMonth);
+  if (monthEntries.length > 0) {
+    const [bestKey, bestKm] = monthEntries.reduce((a, b) => b[1] > a[1] ? b : a);
+    const [year, month] = bestKey.split('-').map(Number);
+    const monthLabel = new Date(year, month, 1).toLocaleDateString(localeStr(), { month: 'long', year: 'numeric' });
+    records.push({ emoji: '\ud83d\uddfa\ufe0f', key: 'record_best_month', value: fmtKm(bestKm), date: monthLabel, id: null });
+  }
+
+  el.innerHTML = records.map(r => {
+    const inner = `
+      <div class="record-emoji">${r.emoji}</div>
+      <div class="record-mid">
+        <div class="record-label">${t(r.key)}</div>
+        <div class="record-date">${r.date}</div>
+      </div>
+      <div class="record-value">${r.value}</div>
+    `;
+    return r.id != null
+      ? `<a href="session.html?id=${r.id}" class="record-row" style="text-decoration:none; color:inherit;">${inner}</a>`
+      : `<div class="record-row">${inner}</div>`;
+  }).join('');
+}
+
+// ---------- V2L Calculator ----------
+const V2L_MAX_OUTPUT_KW = 2.2; // conservative rated figure; real-world tested up to ~2.5kW sustained
+const V2L_MIN_BATTERY_PCT = 15; // BYD's own stated minimum before using the V2L adaptor
+const V2L_INVERTER_EFFICIENCY = 0.9;
+
+let v2lAppliances = [
+  { name: 'Fridge', watts: 150 },
+  { name: 'TV', watts: 100 },
+  { name: 'Lights', watts: 50 },
+  { name: 'Laptop', watts: 60 },
+];
+
+function renderV2lAppliances() {
+  const el = document.getElementById('v2l-appliances');
+  el.innerHTML = v2lAppliances.map((a, i) => `
+    <div class="v2l-row">
+      <input type="text" value="${a.name}" data-idx="${i}" data-field="name">
+      <input type="number" min="0" step="10" value="${a.watts}" data-idx="${i}" data-field="watts">
+      <span class="unit">W</span>
+      <button class="v2l-remove" data-remove="${i}">\u2715</button>
+    </div>
+  `).join('');
+  el.querySelectorAll('input').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const idx = Number(e.target.dataset.idx);
+      const field = e.target.dataset.field;
+      v2lAppliances[idx][field] = field === 'watts' ? (Number(e.target.value) || 0) : e.target.value;
+      updateV2lResult();
+    });
+  });
+  el.querySelectorAll('[data-remove]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      v2lAppliances.splice(Number(btn.dataset.remove), 1);
+      renderV2lAppliances();
+      updateV2lResult();
+    });
+  });
+}
+
+async function updateV2lResult() {
+  const el = document.getElementById('v2l-result');
+  const totalWatts = v2lAppliances.reduce((sum, a) => sum + (Number(a.watts) || 0), 0);
+
+  try {
+    const [latest, settingsRows] = await Promise.all([
+      sb('vehicle_snapshots?select=battery_pct&order=recorded_at.desc&limit=1'),
+      sb('tracker_settings?select=battery_capacity_kwh'),
+    ]);
+    const batteryPct = latest[0]?.battery_pct;
+    const capacity = settingsRows[0]?.battery_capacity_kwh;
+
+    if (batteryPct == null || capacity == null || totalWatts === 0) {
+      el.innerHTML = `<div class="v2l-total">${t('v2l_total_load')}: ${totalWatts} W</div>`;
+      return;
+    }
+
+    const usablePct = Math.max(Number(batteryPct) - V2L_MIN_BATTERY_PCT, 0);
+    const usableKwh = (usablePct / 100) * capacity * V2L_INVERTER_EFFICIENCY;
+    const runtimeHours = usableKwh / (totalWatts / 1000);
+    const h = Math.floor(runtimeHours), m = Math.round((runtimeHours - h) * 60);
+    const exceeds = totalWatts / 1000 > V2L_MAX_OUTPUT_KW;
+
+    el.innerHTML = `
+      <div class="v2l-total">${t('v2l_total_load')}: ${totalWatts} W</div>
+      <div class="v2l-runtime">${runtimeHours > 0 ? `${h}h ${m}min` : '\u2014'}</div>
+      <div class="record-label">${t('v2l_estimated_runtime')}</div>
+      ${exceeds ? `<div class="v2l-note v2l-warning">${t('v2l_exceeds')}</div>` : ''}
+      <div class="v2l-note">${t('v2l_note')}</div>
+    `;
+  } catch (err) {
+    el.innerHTML = `<div class="v2l-note">${t('v2l_no_battery_data')}</div>`;
+    console.error('v2l calc failed', err);
+  }
+}
+
+document.getElementById('v2l-add-btn').addEventListener('click', () => {
+  v2lAppliances.push({ name: '', watts: 0 });
+  renderV2lAppliances();
+  updateV2lResult();
+});
+
+renderV2lAppliances();
+updateV2lResult();
+
 function renderInsights(sessions) {
   const el = document.getElementById('insights-card');
   const insights = computeInsights(sessions);
@@ -1768,12 +2016,13 @@ function renderLastChargeCard(mostRecent) {
     return;
   }
   const isHome = mostRecent.location_type === 'home';
+  const kmStr = mostRecent.km_since_last_charge != null ? ` \u00b7 ${fmtKm(mostRecent.km_since_last_charge)} ${t('driven_since_prev')}` : '';
   el.innerHTML = `
     <a href="session.html?id=${mostRecent.id}" class="last-charge-row" style="text-decoration:none; color:inherit;">
       <div class="avatar ${isHome ? '' : 'public'}">${isHome ? ICON_HOME : ICON_PUBLIC}</div>
       <div class="last-charge-mid">
         <div class="last-charge-title">${mostRecent.start_pct}% \u2192 ${mostRecent.end_pct}%</div>
-        <div class="last-charge-sub">${fmtDate(mostRecent.started_at)} \u00b7 ${fmtKwh(mostRecent.energy_added_kwh)} \u00b7 ${isHome ? t('home') : t('public_charger')}</div>
+        <div class="last-charge-sub">${fmtDate(mostRecent.started_at)} \u00b7 ${fmtKwh(mostRecent.energy_added_kwh)} \u00b7 ${isHome ? t('home') : t('public_charger')}${kmStr}</div>
       </div>
       <div class="last-charge-cost">${fmtMoney(mostRecent.cost)}</div>
     </a>
@@ -1788,6 +2037,7 @@ async function load() {
     renderSessions(sessions);
     renderLastChargeCard(allSessions[0]);
     renderInsights(allSessions);
+    await renderRecords(allSessions);
     await loadLiveStatus();
     await loadLocationCard();
     await loadEfficiency();
