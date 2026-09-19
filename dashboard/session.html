@@ -418,8 +418,12 @@ function render(s) {
     <div class="group">
       <div class="group-header">Distance</div>
       <div class="group-card">
-        <div class="row"><span class="k">Odometer at start</span><span class="v">${fmtKm(s.start_odometer_km)}</span></div>
-        <div class="row"><span class="k">Odometer at end</span><span class="v">${fmtKm(s.end_odometer_km)}</span></div>
+        ${s.start_odometer_km != null && s.end_odometer_km != null && Number(s.start_odometer_km) !== Number(s.end_odometer_km) ? `
+          <div class="row"><span class="k">Odometer at start</span><span class="v">${fmtKm(s.start_odometer_km)}</span></div>
+          <div class="row"><span class="k">Odometer at end</span><span class="v">${fmtKm(s.end_odometer_km)}</span></div>
+        ` : `
+          <div class="row"><span class="k">Odometer</span><span class="v">${fmtKm(s.end_odometer_km ?? s.start_odometer_km)}</span></div>
+        `}
         <div class="row"><span class="k">Driven since last charge</span><span class="v">${s.km_since_last_charge != null ? fmtKm(s.km_since_last_charge) : 'first tracked charge'}</span></div>
       </div>
     </div>

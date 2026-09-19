@@ -561,6 +561,61 @@
   .ptr-indicator.spinning svg{ animation: ptr-spin 0.7s linear infinite; }
   @keyframes ptr-spin{ to{ transform: rotate(360deg); } }
 
+  .action-overlay{
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    padding: 24px;
+  }
+  .action-overlay-card{
+    background: var(--card);
+    border-radius: 18px;
+    padding: 28px 24px;
+    max-width: 300px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+  .action-spinner{
+    width: 32px; height: 32px;
+    margin: 0 auto 16px;
+    border: 3px solid rgba(118,118,128,0.2);
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: action-spin 0.8s linear infinite;
+  }
+  @keyframes action-spin{ to{ transform: rotate(360deg); } }
+  .action-overlay-text{
+    font-size: 15px;
+    color: var(--text);
+    line-height: 1.4;
+  }
+  .action-result-icon{
+    width: 40px; height: 40px;
+    margin: 0 auto 14px;
+    padding: 8px;
+    border-radius: 50%;
+  }
+  .action-result-icon.success{ color: #fff; background: var(--green); }
+  .action-result-icon.error{ color: #fff; background: var(--orange); }
+  .action-overlay-dismiss{
+    margin-top: 18px;
+    padding: 10px 28px;
+    border-radius: 10px;
+    border: none;
+    background: var(--blue);
+    color: #fff;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 590;
+    cursor: pointer;
+  }
+  .action-overlay-dismiss:active{ opacity: 0.7; }
+
   .passkey-overlay{
     position: fixed;
     inset: 0;
@@ -1526,8 +1581,34 @@ function renderSpendChart(period) {
     const byDay = {};
     allSessions.forEach(s => {
       if (s.cost == null) return;
-      const key = new Date(s.started_at).toDateString();
-      byDay[key] = (byDay[key] || 0) + Number(s.cost);
+      const sessionStart = new Date(s.started_at);
+      const sessionEnd = s.ended_at ? new Date(s.ended_at) : new Date();
+      const totalMs = sessionEnd - sessionStart;
+
+      const startDay = new Date(sessionStart.getFullYear(), sessionStart.getMonth(), sessionStart.getDate());
+      const endDay = new Date(sessionEnd.getFullYear(), sessionEnd.getMonth(), sessionEnd.getDate());
+
+      if (totalMs <= 0 || startDay.getTime() === endDay.getTime()) {
+        // Same-day session (the vast majority) -- no splitting needed.
+        const key = sessionStart.toDateString();
+        byDay[key] = (byDay[key] || 0) + Number(s.cost);
+        return;
+      }
+
+      // Spans multiple calendar days: split the cost by how much of the
+      // session's actual duration fell on each day, using time as a proxy
+      // for energy (a reasonable approximation given charging power tends
+      // to be fairly steady session-to-session, without needing to fetch
+      // and integrate every spanning session's raw snapshots here).
+      let cursor = new Date(sessionStart);
+      while (cursor < sessionEnd) {
+        const dayEnd = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
+        const segmentEnd = dayEnd < sessionEnd ? dayEnd : sessionEnd;
+        const segmentMs = segmentEnd - cursor;
+        const key = cursor.toDateString();
+        byDay[key] = (byDay[key] || 0) + Number(s.cost) * (segmentMs / totalMs);
+        cursor = segmentEnd;
+      }
     });
 
     for (let i = 0; i < numDays; i++) {
@@ -2101,6 +2182,46 @@ refreshBtn.addEventListener('click', async () => {
 
 const PASSKEY_STORAGE_KEY = 'atto3_passkey';
 
+// ---------- Loading overlay / result popup (shared by Poll Now and control actions) ----------
+function showLoadingOverlay(message) {
+  hideLoadingOverlay();
+  const overlay = document.createElement('div');
+  overlay.id = 'action-overlay';
+  overlay.className = 'action-overlay';
+  overlay.innerHTML = `
+    <div class="action-overlay-card">
+      <div class="action-spinner"></div>
+      <div class="action-overlay-text" id="action-overlay-text">${message}</div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+function updateLoadingOverlay(message) {
+  const el = document.getElementById('action-overlay-text');
+  if (el) el.textContent = message;
+}
+
+function showResultOverlay(success, message) {
+  const overlay = document.getElementById('action-overlay');
+  if (!overlay) return;
+  const icon = success
+    ? `<svg class="action-result-icon success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`
+    : `<svg class="action-result-icon error" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>`;
+  const card = overlay.querySelector('.action-overlay-card');
+  card.innerHTML = `
+    ${icon}
+    <div class="action-overlay-text">${message}</div>
+    <button class="action-overlay-dismiss">OK</button>
+  `;
+  card.querySelector('.action-overlay-dismiss').addEventListener('click', hideLoadingOverlay);
+}
+
+function hideLoadingOverlay() {
+  const existing = document.getElementById('action-overlay');
+  if (existing) existing.remove();
+}
+
 function showPasskeyModal(errorMsg) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div');
@@ -2152,7 +2273,7 @@ const TRIGGER_URL = `${SUPABASE_URL}/functions/v1/trigger-poll`;
 
 async function doPollNow(passkey) {
   pollNowBtn.classList.add('polling');
-  pushStatus.textContent = t('polling_now');
+  showLoadingOverlay(t('polling_now'));
   try {
     const res = await fetch(TRIGGER_URL, {
       method: 'POST',
@@ -2162,9 +2283,9 @@ async function doPollNow(passkey) {
     if (res.status === 401) {
       clearStoredPasskey();
       pollNowBtn.classList.remove('polling');
+      hideLoadingOverlay();
       const retryKey = await getPasskey(t('passkey_wrong'));
       if (retryKey) await doPollNow(retryKey);
-      else pushStatus.textContent = '';
       return;
     }
     const data = await res.json();
@@ -2173,16 +2294,15 @@ async function doPollNow(passkey) {
     // The GitHub Actions run itself takes ~15-20s to check out, install
     // deps, and reach the car -- there's nothing to refresh yet the
     // instant this call returns, so wait before pulling fresh data.
-    pushStatus.textContent = t('waiting_response');
+    updateLoadingOverlay(t('waiting_response'));
     await new Promise(r => setTimeout(r, 20000));
     await load();
-    pushStatus.textContent = `Updated ${new Date().toLocaleTimeString(localeStr(), { hour: 'numeric', minute: '2-digit' })}`;
+    showResultOverlay(true, `Updated ${new Date().toLocaleTimeString(localeStr(), { hour: 'numeric', minute: '2-digit' })}`);
   } catch (err) {
-    pushStatus.textContent = t('poll_failed');
     console.error(err);
+    showResultOverlay(false, t('poll_failed'));
   } finally {
     pollNowBtn.classList.remove('polling');
-    setTimeout(() => { pushStatus.textContent = ''; }, 6000);
   }
 }
 
@@ -2217,7 +2337,7 @@ stopAttemptBtn.addEventListener('click', async () => {
 
 async function sendControlAction(action, btn, statusEl, passkey) {
   btn.disabled = true;
-  statusEl.textContent = 'Sending command\u2026';
+  showLoadingOverlay('Sending command\u2026');
 
   try {
     let res = await fetch(`${SUPABASE_URL}/functions/v1/control-charge`, {
@@ -2227,9 +2347,11 @@ async function sendControlAction(action, btn, statusEl, passkey) {
     });
     if (res.status === 401) {
       clearStoredPasskey();
+      hideLoadingOverlay();
       const retryKey = await getPasskey('Incorrect passkey \u2014 try again.');
-      if (!retryKey) { statusEl.textContent = ''; btn.disabled = false; return; }
+      if (!retryKey) { btn.disabled = false; return; }
       passkey = retryKey;
+      showLoadingOverlay('Sending command\u2026');
       res = await fetch(`${SUPABASE_URL}/functions/v1/control-charge`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2239,27 +2361,24 @@ async function sendControlAction(action, btn, statusEl, passkey) {
     const data = await res.json();
     if (!data.triggered) throw new Error('trigger failed');
 
-    statusEl.textContent = 'Command sent \u2026 waiting for it to take effect\u2026';
-    await new Promise(r => setTimeout(r, 20000)); // give control.py time to send the command and check the result
+    // BYD's cloud has been observed taking 1-2 min to reflect a command's
+    // real effect -- checking sooner than that just re-reads the old state.
+    updateLoadingOverlay('Command sent \u2014 this can take up to 2 minutes to take effect\u2026');
+    await new Promise(r => setTimeout(r, 90000));
 
-    // control.py checks the car's new state itself, but never writes it to
-    // Supabase -- without this, refreshing here would just re-show
-    // whatever the last regular 5-min poll happened to capture, which
-    // could be several minutes stale relative to the command we just sent.
-    statusEl.textContent = 'Polling for the real current state\u2026';
+    updateLoadingOverlay('Checking the real current state\u2026');
     try {
       await fetch(TRIGGER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
     } catch (err) {
       console.error('follow-up poll trigger failed', err);
     }
-    await new Promise(r => setTimeout(r, 20000)); // give that poll time to actually run and write a fresh snapshot
+    await new Promise(r => setTimeout(r, 25000));
 
     await load();
-    statusEl.textContent = 'Updated with the real current state.';
-    setTimeout(() => { statusEl.textContent = ''; }, 8000);
+    showResultOverlay(true, 'Dashboard updated. Check the status above to confirm the actual result \u2014 a notification with the outcome should also arrive shortly.');
   } catch (err) {
-    statusEl.textContent = 'Failed to send command \u2014 try again.';
     console.error(err);
+    showResultOverlay(false, 'Something went wrong sending the command. Try again, or check the status manually.');
   } finally {
     btn.disabled = false;
   }
