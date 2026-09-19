@@ -748,6 +748,8 @@
           <div class="status-title" id="status-title" data-i18n="loading">Loading…</div>
         </div>
         <div class="status-idle-detail" id="status-idle-detail"></div>
+        <button class="stop-attempt-btn" id="start-charge-btn" style="display:none;">Start Charging</button>
+        <div class="stop-attempt-status" id="start-charge-status"></div>
         <div class="status-grid" id="status-grid" style="display:none;"></div>
         <button class="stop-attempt-btn" id="stop-attempt-btn" style="display:none;">Try Stop Charging (Experimental)</button>
         <div class="stop-attempt-status" id="stop-attempt-status"></div>
@@ -1400,6 +1402,7 @@ function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, batte
     ` : ''}
   `;
   document.getElementById('stop-attempt-btn').style.display = 'block';
+  document.getElementById('start-charge-btn').style.display = 'none';
 }
 
 function renderIdleStatus(snapshot) {
@@ -1407,6 +1410,7 @@ function renderIdleStatus(snapshot) {
   card.classList.remove('charging');
   document.getElementById('status-grid').style.display = 'none';
   document.getElementById('stop-attempt-btn').style.display = 'none';
+  document.getElementById('start-charge-btn').style.display = 'block';
 
   if (!snapshot) {
     document.getElementById('status-title').textContent = t('not_charging');
@@ -2208,39 +2212,62 @@ stopAttemptBtn.addEventListener('click', async () => {
   let passkey = await getPasskey();
   if (!passkey) return;
 
-  stopAttemptBtn.disabled = true;
-  stopAttemptStatus.textContent = 'Sending command\u2026';
+  await sendControlAction('stop', stopAttemptBtn, stopAttemptStatus, passkey);
+});
+
+async function sendControlAction(action, btn, statusEl, passkey) {
+  btn.disabled = true;
+  statusEl.textContent = 'Sending command\u2026';
 
   try {
     let res = await fetch(`${SUPABASE_URL}/functions/v1/control-charge`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ passkey }),
+      body: JSON.stringify({ passkey, action }),
     });
     if (res.status === 401) {
       clearStoredPasskey();
       const retryKey = await getPasskey('Incorrect passkey \u2014 try again.');
-      if (!retryKey) { stopAttemptStatus.textContent = ''; stopAttemptBtn.disabled = false; return; }
+      if (!retryKey) { statusEl.textContent = ''; btn.disabled = false; return; }
+      passkey = retryKey;
       res = await fetch(`${SUPABASE_URL}/functions/v1/control-charge`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ passkey: retryKey }),
+        body: JSON.stringify({ passkey, action }),
       });
     }
     const data = await res.json();
     if (!data.triggered) throw new Error('trigger failed');
 
-    stopAttemptStatus.textContent = 'Command sent \u2014 checking result\u2026';
+    statusEl.textContent = 'Command sent \u2014 checking result\u2026';
     await new Promise(r => setTimeout(r, 20000));
     await load();
-    stopAttemptStatus.textContent = 'Check the status above, and watch for a notification with the result.';
-    setTimeout(() => { stopAttemptStatus.textContent = ''; }, 8000);
+    statusEl.textContent = 'Check the status above, and watch for a notification with the result.';
+    setTimeout(() => { statusEl.textContent = ''; }, 8000);
   } catch (err) {
-    stopAttemptStatus.textContent = 'Failed to send command \u2014 try again.';
+    statusEl.textContent = 'Failed to send command \u2014 try again.';
     console.error(err);
   } finally {
-    stopAttemptBtn.disabled = false;
+    btn.disabled = false;
   }
+}
+
+const startChargeBtn = document.getElementById('start-charge-btn');
+const startChargeStatus = document.getElementById('start-charge-status');
+
+startChargeBtn.addEventListener('click', async () => {
+  const confirmed = confirm(
+    "This sends a real start-charging command to the car.\n\n" +
+    "This one is the officially documented command (not experimental), " +
+    "but make sure the cable is actually plugged in first.\n\n" +
+    "Continue?"
+  );
+  if (!confirmed) return;
+
+  const passkey = await getPasskey();
+  if (!passkey) return;
+
+  await sendControlAction('start', startChargeBtn, startChargeStatus, passkey);
 });
 
 let appUnlocked = false; // resets on page reload -- deliberately re-locks each fresh visit
