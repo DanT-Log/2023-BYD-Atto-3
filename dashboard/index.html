@@ -2194,11 +2194,12 @@ const stopAttemptStatus = document.getElementById('stop-attempt-status');
 
 stopAttemptBtn.addEventListener('click', async () => {
   const confirmed = confirm(
-    "EXPERIMENTAL, UNVERIFIED.\n\n" +
-    "BYD's official stop-charging command is a known no-op -- it reports " +
-    "success but doesn't actually stop the car. This tries a different " +
-    "method (disabling smart charging) that MIGHT work, but hasn't been " +
-    "confirmed to actually stop an active charge.\n\n" +
+    "EXPERIMENTAL, UNVERIFIED (attempt #2).\n\n" +
+    "BYD's official stop command is confirmed broken, and a first workaround " +
+    "(disabling smart charging) was tested live and also did NOT stop the car.\n\n" +
+    "This tries a different method: setting a charging schedule whose window " +
+    "has just closed. It MIGHT work since it's a different mechanism, but this " +
+    "is genuinely untested too.\n\n" +
     "If it doesn't work, you'll need to physically unplug the car.\n\n" +
     "Continue?"
   );
