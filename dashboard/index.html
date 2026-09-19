@@ -745,10 +745,17 @@
       </div>
 
       <div class="group">
+        <div class="group-header" data-i18n="standby_loss_header">Standby Loss</div>
+        <div class="group-card" id="standby-loss-card"></div>
+      </div>
+
+      <div class="group">
         <div class="group-header" data-i18n="efficiency_header">Efficiency</div>
         <div class="group-card">
           <div class="row"><span class="k" data-i18n="tracked_efficiency">Your tracked efficiency</span><span class="v" id="tracked-efficiency">—</span></div>
           <div class="row"><span class="k" data-i18n="car_efficiency">Car's own estimate</span><span class="v" id="car-efficiency">—</span></div>
+          <div class="row"><span class="k" data-i18n="real_world_range">Estimated real range</span><span class="v" id="real-world-range">—</span></div>
+          <div class="row"><span class="k" data-i18n="wltp_range">vs WLTP (420 km)</span><span class="v" id="wltp-variance">—</span></div>
         </div>
       </div>
 
@@ -906,6 +913,12 @@ const TRANSLATIONS = {
     rated_capacity: "Rated capacity",
     health: "Health",
     battery_health_empty: "Need a few more charges with 15%+ gained to estimate battery health.",
+    standby_loss_header: "Standby Loss",
+    standby_loss_total: "Lost while parked (30 days)",
+    standby_loss_cost: "Estimated cost to recharge",
+    standby_loss_empty: "No standby loss detected in the last 30 days \u2014 nice.",
+    real_world_range: "Estimated real range",
+    wltp_range: "vs WLTP (420 km)",
     efficiency_header: "Efficiency",
     tracked_efficiency: "Your tracked efficiency",
     car_efficiency: "Car's own estimate",
@@ -988,6 +1001,12 @@ const TRANSLATIONS = {
     rated_capacity: "Dung l\u01b0\u1ee3ng \u0111\u1ecbnh m\u1ee9c",
     health: "T\u00ecnh tr\u1ea1ng",
     battery_health_empty: "C\u1ea7n th\u00eam v\u00e0i l\u01b0\u1ee3t s\u1ea1c t\u0103ng tr\u00ean 15% \u0111\u1ec3 \u01b0\u1edbc t\u00ednh t\u00ecnh tr\u1ea1ng pin.",
+    standby_loss_header: "Hao h\u1ee5t khi \u0111\u1eadu xe",
+    standby_loss_total: "Hao h\u1ee5t khi \u0111\u1eadu xe (30 ng\u00e0y)",
+    standby_loss_cost: "Chi ph\u00ed \u01b0\u1edbc t\u00ednh \u0111\u1ec3 s\u1ea1c l\u1ea1i",
+    standby_loss_empty: "Kh\u00f4ng ph\u00e1t hi\u1ec7n hao h\u1ee5t n\u00e0o trong 30 ng\u00e0y qua \u2014 tuy\u1ec7t.",
+    real_world_range: "Qu\u00e3ng \u0111\u01b0\u1eddng th\u1ef1c t\u1ebf \u01b0\u1edbc t\u00ednh",
+    wltp_range: "So v\u1edbi WLTP (420 km)",
     efficiency_header: "Hi\u1ec7u su\u1ea5t",
     tracked_efficiency: "Hi\u1ec7u su\u1ea5t b\u1ea1n theo d\u00f5i",
     car_efficiency: "\u01af\u1edbc t\u00ednh c\u1ee7a xe",
@@ -1558,6 +1577,60 @@ async function renderBatteryHealth(sessions) {
   }
 }
 
+// ---------- Standby Loss (phantom drain) ----------
+const WLTP_RANGE_KM = 420; // official BYD Atto 3 Extended Range figure, verified
+
+async function renderStandbyLoss() {
+  const el = document.getElementById('standby-loss-card');
+  try {
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+    const snapshots = await sb(`vehicle_snapshots?recorded_at=gte.${encodeURIComponent(since.toISOString())}&select=recorded_at,battery_pct,is_charging,odometer_km&order=recorded_at.asc`);
+    const settingsRows = await sb('tracker_settings?select=battery_capacity_kwh,home_rate_per_kwh');
+    const settings = settingsRows[0] || {};
+
+    let totalPctLost = 0;
+    for (let i = 0; i < snapshots.length - 1; i++) {
+      const a = snapshots[i], b = snapshots[i + 1];
+      if (a.is_charging || b.is_charging) continue; // only count while parked
+      if (a.odometer_km == null || b.odometer_km == null || Number(a.odometer_km) !== Number(b.odometer_km)) continue; // car moved, not standby loss
+      const drop = Number(a.battery_pct) - Number(b.battery_pct);
+      if (drop > 0) totalPctLost += drop;
+    }
+
+    if (totalPctLost <= 0 || !settings.battery_capacity_kwh) {
+      el.innerHTML = `<div class="empty">${t('standby_loss_empty')}</div>`;
+      return;
+    }
+
+    const kwhLost = (totalPctLost / 100) * settings.battery_capacity_kwh;
+    const costEstimate = settings.home_rate_per_kwh != null ? kwhLost * settings.home_rate_per_kwh : null;
+
+    el.innerHTML = `
+      <div class="row"><span class="k">${t('standby_loss_total')}</span><span class="v">${fmtKwh(kwhLost)}</span></div>
+      ${costEstimate != null ? `<div class="row"><span class="k">${t('standby_loss_cost')}</span><span class="v">${fmtMoney(costEstimate)}</span></div>` : ''}
+    `;
+  } catch (err) {
+    el.innerHTML = '';
+    console.error('standby loss failed', err);
+  }
+}
+
+function renderRealWorldRange(sessions, ratedCapacity) {
+  const trackedEfficiency = computeTrackedEfficiency(sessions); // kWh per 100km, already exists
+  const rangeEl = document.getElementById('real-world-range');
+  const wltpEl = document.getElementById('wltp-variance');
+  if (trackedEfficiency == null || !ratedCapacity) {
+    rangeEl.textContent = '\u2014';
+    wltpEl.textContent = '\u2014';
+    return;
+  }
+  const realRangeKm = ratedCapacity / (trackedEfficiency / 100);
+  const variancePct = ((realRangeKm - WLTP_RANGE_KM) / WLTP_RANGE_KM) * 100;
+  rangeEl.textContent = `${realRangeKm.toFixed(0)} km`;
+  wltpEl.textContent = `${variancePct >= 0 ? '+' : ''}${variancePct.toFixed(0)}%`;
+}
+
 // ---------- Cost of Ownership ----------
 const EXPENSE_CATEGORY_KEYS = {
   registration: 'cat_registration',
@@ -1719,6 +1792,9 @@ async function load() {
     await loadLocationCard();
     await loadEfficiency();
     await renderBatteryHealth(allSessions);
+    await renderStandbyLoss();
+    const capRows = await sb('tracker_settings?select=battery_capacity_kwh');
+    renderRealWorldRange(allSessions, capRows[0]?.battery_capacity_kwh);
     await loadOwnership(allSessions);
     await renderPetrolFun(allSessions);
   } catch (err) {
