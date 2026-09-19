@@ -1308,11 +1308,31 @@ function periodStart(period) {
   return new Date(0); // all time
 }
 
-function computeSummary(sessions) {
-  const totalCharges = sessions.length;
-  const totalSpent = sessions.reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
-  const totalKwh = sessions.reduce((sum, s) => sum + (Number(s.energy_added_kwh) || 0), 0);
-  const totalKm = sessions.reduce((sum, s) => sum + (Number(s.km_since_last_charge) || 0), 0);
+// How much of a session's actual duration falls within [rangeStart, rangeEnd] --
+// e.g. a session that started yesterday and ended this morning is only
+// partly "today"'s. Matches the same proportional approach used for the
+// Spend Over Time chart, so the hero total and the chart never disagree.
+function sessionOverlapFraction(session, rangeStart, rangeEnd) {
+  const sessionStart = new Date(session.started_at);
+  const sessionEnd = session.ended_at ? new Date(session.ended_at) : new Date();
+  const totalMs = sessionEnd - sessionStart;
+  if (totalMs <= 0) return (sessionStart >= rangeStart && sessionStart <= rangeEnd) ? 1 : 0;
+  const overlapStart = sessionStart > rangeStart ? sessionStart : rangeStart;
+  const overlapEnd = sessionEnd < rangeEnd ? sessionEnd : rangeEnd;
+  const overlapMs = overlapEnd - overlapStart;
+  return overlapMs > 0 ? overlapMs / totalMs : 0;
+}
+
+function computeSummary(sessions, rangeStart, rangeEnd) {
+  let totalCharges = 0, totalSpent = 0, totalKwh = 0, totalKm = 0;
+  sessions.forEach(s => {
+    const frac = sessionOverlapFraction(s, rangeStart, rangeEnd);
+    if (frac <= 0) return;
+    totalCharges += 1;
+    totalSpent += (Number(s.cost) || 0) * frac;
+    totalKwh += (Number(s.energy_added_kwh) || 0) * frac;
+    totalKm += (Number(s.km_since_last_charge) || 0) * frac;
+  });
   return {
     total_charges: totalCharges,
     total_spent: totalSpent,
@@ -1337,8 +1357,9 @@ function renderSummary(summary) {
 
 function applyPeriod() {
   const since = periodStart(activePeriod);
-  const filtered = allSessions.filter(s => new Date(s.started_at) >= since);
-  renderSummary(computeSummary(filtered));
+  const now = new Date();
+  const overlapping = allSessions.filter(s => sessionOverlapFraction(s, since, now) > 0);
+  renderSummary(computeSummary(overlapping, since, now));
   renderSpendChart(activePeriod);
 
   document.querySelectorAll('#period-tabs button').forEach(btn => {
