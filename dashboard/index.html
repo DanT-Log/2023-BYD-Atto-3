@@ -56,6 +56,7 @@
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     min-height: 100vh;
+    touch-action: manipulation;
   }
 
   .wrap{
@@ -277,6 +278,15 @@
     color: var(--text-secondary);
     -webkit-font-smoothing: antialiased;
   }
+  .chart-readout{
+    text-align: center;
+    font-size: 13px;
+    font-weight: 590;
+    color: var(--text-secondary);
+    margin-top: 10px;
+    min-height: 16px;
+  }
+  #spend-chart rect{ cursor: pointer; }
 
   .fun-group{ margin-top: 32px; }
   .fun-card{
@@ -705,11 +715,6 @@
       </div>
 
       <div class="group">
-        <div class="group-header" data-i18n="insights_header">Insights</div>
-        <div class="group-card" id="insights-card"></div>
-      </div>
-
-      <div class="group">
         <div class="group-header" data-i18n="overview_header">Overview</div>
         <div class="segmented" id="period-tabs">
           <button data-period="daily" data-i18n="daily">Daily</button>
@@ -730,6 +735,7 @@
         <div class="chart-card">
           <svg id="spend-chart" width="100%" height="100" viewBox="0 0 860 100" preserveAspectRatio="none"></svg>
           <div class="chart-labels" id="chart-labels"></div>
+          <div class="chart-readout" id="chart-readout" data-i18n="chart_readout_hint">Tap a bar for details</div>
         </div>
       </div>
 
@@ -775,6 +781,11 @@
             <div class="edit-status" id="expense-status"></div>
           </div>
         </div>
+      </div>
+
+      <div class="group">
+        <div class="group-header" data-i18n="insights_header">Insights</div>
+        <div class="group-card" id="insights-card"></div>
       </div>
 
       <div class="group fun-group">
@@ -926,6 +937,8 @@ const TRANSLATIONS = {
     enter_valid_amount_date: "Enter a valid amount and date.",
     enter_valid_rate: "Enter a valid rate.",
     saving: "Saving\u2026",
+    chart_readout_hint: "Tap a bar for details",
+    chart_readout_value: "{date}: {amount}",
     started: "Started", charging_speed: "Charging speed", elapsed: "Elapsed",
     energy_so_far: "Energy so far", cost_so_far: "Cost so far",
     estimated_full_by: "Estimated full by", time_remaining: "Time remaining",
@@ -1006,6 +1019,8 @@ const TRANSLATIONS = {
     enter_valid_amount_date: "Nh\u1eadp s\u1ed1 ti\u1ec1n v\u00e0 ng\u00e0y h\u1ee3p l\u1ec7.",
     enter_valid_rate: "Nh\u1eadp m\u1ee9c gi\u00e1 h\u1ee3p l\u1ec7.",
     saving: "\u0110ang l\u01b0u\u2026",
+    chart_readout_hint: "Nh\u1ea5n v\u00e0o m\u1ed9t c\u1ed9t \u0111\u1ec3 xem chi ti\u1ebft",
+    chart_readout_value: "{date}: {amount}",
     started: "B\u1eaft \u0111\u1ea7u", charging_speed: "T\u1ed1c \u0111\u1ed9 s\u1ea1c", elapsed: "Th\u1eddi gian tr\u00f4i qua",
     energy_so_far: "N\u0103ng l\u01b0\u1ee3ng \u0111\u00e3 n\u1ea1p", cost_so_far: "Chi ph\u00ed hi\u1ec7n t\u1ea1i",
     estimated_full_by: "D\u1ef1 ki\u1ebfn \u0111\u1ea7y l\u00fac", time_remaining: "Th\u1eddi gian c\u00f2n l\u1ea1i",
@@ -1338,6 +1353,8 @@ function renderSpendChart(period) {
     buckets = keys.map(k => ({
       label: new Date(`${k}-01`).toLocaleDateString(localeStr(), { month: 'short' }),
       value: byMonth[k],
+      fullDate: new Date(`${k}-01`),
+      fullDateOpts: { month: 'long', year: 'numeric' },
     }));
   } else {
     let start, numDays;
@@ -1368,11 +1385,13 @@ function renderSpendChart(period) {
       const label = period === 'monthly'
         ? (i === 0 || (i + 1) % 5 === 0 || i === numDays - 1 ? String(d.getDate()) : '')
         : d.toLocaleDateString(localeStr(), { weekday: 'narrow' });
-      buckets.push({ label, value: byDay[key] || 0 });
+      buckets.push({ label, value: byDay[key] || 0, fullDate: d, fullDateOpts: { weekday: 'long', day: 'numeric', month: 'short' } });
     }
   }
 
   const labelsEl = document.getElementById('chart-labels');
+  const readoutEl = document.getElementById('chart-readout');
+  readoutEl.textContent = t('chart_readout_hint');
   if (buckets.length === 0) { svg.innerHTML = ''; labelsEl.innerHTML = ''; return; }
 
   const w = 860, h = 100, padBottom = 4, padTop = 8;
@@ -1385,7 +1404,12 @@ function renderSpendChart(period) {
     const barH = ((h - padTop - padBottom) * b.value) / max;
     const x = barGap + i * (barWidth + barGap);
     const y = h - padBottom - barH;
-    return `<rect x="${x}" y="${y}" width="${barWidth}" height="${Math.max(barH, b.value > 0 ? 2 : 0)}" rx="3" fill="${accent}"/>`;
+    // A transparent full-height rect behind each bar widens the tap
+    // target for short/zero bars, which are otherwise hard to hit.
+    return `
+      <rect data-index="${i}" x="${x}" y="0" width="${barWidth}" height="${h}" fill="transparent"/>
+      <rect data-index="${i}" x="${x}" y="${y}" width="${barWidth}" height="${Math.max(barH, b.value > 0 ? 2 : 0)}" rx="3" fill="${accent}" style="pointer-events:none;"/>
+    `;
   }).join('');
 
   svg.innerHTML = bars;
@@ -1393,6 +1417,17 @@ function renderSpendChart(period) {
   // distorted by the chart's non-uniform horizontal scaling on narrow
   // screens -- SVG preserveAspectRatio="none" squishes glyph shapes.
   labelsEl.innerHTML = buckets.map(b => `<span>${b.label || ''}</span>`).join('');
+
+  // Tap a bar to see its exact date and amount in the readout below.
+  // A taller invisible hit-area (clipped back to the bar's real height)
+  // is used since thin/short bars are otherwise hard to tap precisely.
+  svg.onclick = (e) => {
+    const idx = e.target && e.target.dataset ? e.target.dataset.index : null;
+    if (idx == null) return;
+    const b = buckets[idx];
+    const dateStr = b.fullDate.toLocaleDateString(localeStr(), b.fullDateOpts);
+    readoutEl.textContent = t('chart_readout_value', { date: dateStr, amount: fmtMoney(b.value) });
+  };
 }
 
 async function renderPetrolFun(allDoneSessions) {
