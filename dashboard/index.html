@@ -95,6 +95,29 @@
   .icon-btn svg{ width: 18px; height: 18px; transition: transform .6s cubic-bezier(.2,.9,.3,1); }
   #refresh-btn.spinning svg{ transform: rotate(360deg); }
   #poll-now-btn{ color: var(--orange); }
+
+  .stop-attempt-btn{
+    display: block;
+    width: 100%;
+    margin-top: 14px;
+    padding: 11px;
+    border-radius: 10px;
+    border: 1px solid var(--orange);
+    background: transparent;
+    color: var(--orange);
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 590;
+    cursor: pointer;
+  }
+  .stop-attempt-btn:active{ opacity: 0.5; }
+  .stop-attempt-status{
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 8px;
+    text-align: center;
+    min-height: 14px;
+  }
   #poll-now-btn.polling{ animation: poll-pulse 1s ease-in-out infinite; }
   @keyframes poll-pulse{ 0%,100%{ opacity: 1; } 50%{ opacity: 0.4; } }
 
@@ -726,6 +749,8 @@
         </div>
         <div class="status-idle-detail" id="status-idle-detail"></div>
         <div class="status-grid" id="status-grid" style="display:none;"></div>
+        <button class="stop-attempt-btn" id="stop-attempt-btn" style="display:none;">Try Stop Charging (Experimental)</button>
+        <div class="stop-attempt-status" id="stop-attempt-status"></div>
       </div>
 
       <div class="group">
@@ -1374,12 +1399,14 @@ function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, batte
       <div class="status-stat"><div class="k">${t('time_remaining')}</div><div class="v">${fmtRemaining(fullByTarget)}</div></div>
     ` : ''}
   `;
+  document.getElementById('stop-attempt-btn').style.display = 'block';
 }
 
 function renderIdleStatus(snapshot) {
   const card = document.getElementById('status-card');
   card.classList.remove('charging');
   document.getElementById('status-grid').style.display = 'none';
+  document.getElementById('stop-attempt-btn').style.display = 'none';
 
   if (!snapshot) {
     document.getElementById('status-title').textContent = t('not_charging');
@@ -2160,6 +2187,59 @@ pollNowBtn.addEventListener('click', async () => {
   const passkey = await getPasskey();
   if (!passkey) return;
   await doPollNow(passkey);
+});
+
+const stopAttemptBtn = document.getElementById('stop-attempt-btn');
+const stopAttemptStatus = document.getElementById('stop-attempt-status');
+
+stopAttemptBtn.addEventListener('click', async () => {
+  const confirmed = confirm(
+    "EXPERIMENTAL, UNVERIFIED.\n\n" +
+    "BYD's official stop-charging command is a known no-op -- it reports " +
+    "success but doesn't actually stop the car. This tries a different " +
+    "method (disabling smart charging) that MIGHT work, but hasn't been " +
+    "confirmed to actually stop an active charge.\n\n" +
+    "If it doesn't work, you'll need to physically unplug the car.\n\n" +
+    "Continue?"
+  );
+  if (!confirmed) return;
+
+  let passkey = await getPasskey();
+  if (!passkey) return;
+
+  stopAttemptBtn.disabled = true;
+  stopAttemptStatus.textContent = 'Sending command\u2026';
+
+  try {
+    let res = await fetch(`${SUPABASE_URL}/functions/v1/control-charge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passkey }),
+    });
+    if (res.status === 401) {
+      clearStoredPasskey();
+      const retryKey = await getPasskey('Incorrect passkey \u2014 try again.');
+      if (!retryKey) { stopAttemptStatus.textContent = ''; stopAttemptBtn.disabled = false; return; }
+      res = await fetch(`${SUPABASE_URL}/functions/v1/control-charge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passkey: retryKey }),
+      });
+    }
+    const data = await res.json();
+    if (!data.triggered) throw new Error('trigger failed');
+
+    stopAttemptStatus.textContent = 'Command sent \u2014 checking result\u2026';
+    await new Promise(r => setTimeout(r, 20000));
+    await load();
+    stopAttemptStatus.textContent = 'Check the status above, and watch for a notification with the result.';
+    setTimeout(() => { stopAttemptStatus.textContent = ''; }, 8000);
+  } catch (err) {
+    stopAttemptStatus.textContent = 'Failed to send command \u2014 try again.';
+    console.error(err);
+  } finally {
+    stopAttemptBtn.disabled = false;
+  }
 });
 
 let appUnlocked = false; // resets on page reload -- deliberately re-locks each fresh visit
