@@ -1362,6 +1362,7 @@ function applyPeriod() {
   renderSummary(computeSummary(overlapping, since, now));
   renderSpendChart(activePeriod);
   renderPetrolFun(overlapping);
+  renderTrackedEfficiency();
 
   document.querySelectorAll('#period-tabs button').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.period === activePeriod);
@@ -1550,16 +1551,25 @@ async function loadLiveStatus() {
   }
 }
 
-function computeTrackedEfficiency(sessions) {
+function computeTrackedEfficiency(allSessionsFull, rangeStart, rangeEnd) {
   // km_since_last_charge on session N was driven on the battery charge
   // added during session N-1 -- so pair each session's km against the
-  // PRECEDING session's energy, not its own.
-  const asc = [...sessions].sort((a, b) => new Date(a.started_at) - new Date(b.started_at));
+  // PRECEDING session's energy, not its own. This pairing must always run
+  // over the FULL chronological history, never a pre-filtered subset --
+  // filtering the input array first would silently break adjacency
+  // whenever the filter excludes a session sitting between two included
+  // ones, mis-pairing km against the wrong charge's energy. Period
+  // filtering, when needed, is applied per-pair afterward instead.
+  const asc = [...allSessionsFull].sort((a, b) => new Date(a.started_at) - new Date(b.started_at));
   let totalKm = 0, totalKwh = 0;
   for (let i = 1; i < asc.length; i++) {
     const km = Number(asc[i].km_since_last_charge);
     const kwh = Number(asc[i - 1].energy_added_kwh);
     if (!km || !kwh) continue;
+    if (rangeStart && rangeEnd) {
+      const drivenAt = new Date(asc[i].started_at); // roughly when this km's driving concluded
+      if (drivenAt < rangeStart || drivenAt > rangeEnd) continue;
+    }
     totalKm += km;
     totalKwh += kwh;
   }
@@ -1703,7 +1713,9 @@ async function renderPetrolFun(sessions) {
     // conflates "topping the battery up for later" with "cost of this
     // driving" and produces a misleading (even negative) result whenever
     // you charge more than you've driven since.
-    const trackedEfficiency = computeTrackedEfficiency(sessions); // kWh/100km
+    const rangeStart = periodStart(activePeriod);
+    const rangeEnd = new Date();
+    const trackedEfficiency = computeTrackedEfficiency(allSessions, rangeStart, rangeEnd); // kWh/100km
     const periodKwh = sessions.reduce((sum, s) => sum + (Number(s.energy_added_kwh) || 0), 0);
     const periodCost = sessions.reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
     const avgCostPerKwh = periodKwh > 0 ? periodCost / periodKwh : settings.home_rate_per_kwh;
@@ -2123,18 +2135,22 @@ document.getElementById('expense-save-btn').addEventListener('click', async () =
   }
 });
 
-async function loadEfficiency() {
-  try {
-    const tracked = computeTrackedEfficiency(allSessions);
-    document.getElementById('tracked-efficiency').textContent =
-      tracked != null ? `${tracked.toFixed(1)} kWh/100km` : 'Not enough data yet';
+function renderTrackedEfficiency() {
+  const rangeStart = periodStart(activePeriod);
+  const rangeEnd = new Date();
+  const tracked = computeTrackedEfficiency(allSessions, rangeStart, rangeEnd);
+  document.getElementById('tracked-efficiency').textContent =
+    tracked != null ? `${tracked.toFixed(1)} kWh/100km` : 'Not enough data yet';
+}
 
+async function loadCarEfficiency() {
+  try {
     const latest = await sb('vehicle_snapshots?select=car_reported_kwh_per_100km&order=recorded_at.desc&limit=1');
     const carValue = latest[0]?.car_reported_kwh_per_100km;
     document.getElementById('car-efficiency').textContent =
       carValue != null ? `${Number(carValue).toFixed(1)} kWh/100km` : '—';
   } catch (err) {
-    console.error('efficiency load failed', err);
+    console.error('car efficiency load failed', err);
   }
 }
 
@@ -2188,7 +2204,7 @@ async function load() {
     await renderRecords(allSessions);
     await loadLiveStatus();
     await loadLocationCard();
-    await loadEfficiency();
+    await loadCarEfficiency();
     await renderBatteryHealth(allSessions);
     await renderStandbyLoss();
     const capRows = await sb('tracker_settings?select=battery_capacity_kwh');
