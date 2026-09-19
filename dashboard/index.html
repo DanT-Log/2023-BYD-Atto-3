@@ -2239,10 +2239,23 @@ async function sendControlAction(action, btn, statusEl, passkey) {
     const data = await res.json();
     if (!data.triggered) throw new Error('trigger failed');
 
-    statusEl.textContent = 'Command sent \u2014 checking result\u2026';
-    await new Promise(r => setTimeout(r, 20000));
+    statusEl.textContent = 'Command sent \u2026 waiting for it to take effect\u2026';
+    await new Promise(r => setTimeout(r, 20000)); // give control.py time to send the command and check the result
+
+    // control.py checks the car's new state itself, but never writes it to
+    // Supabase -- without this, refreshing here would just re-show
+    // whatever the last regular 5-min poll happened to capture, which
+    // could be several minutes stale relative to the command we just sent.
+    statusEl.textContent = 'Polling for the real current state\u2026';
+    try {
+      await fetch(TRIGGER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    } catch (err) {
+      console.error('follow-up poll trigger failed', err);
+    }
+    await new Promise(r => setTimeout(r, 20000)); // give that poll time to actually run and write a fresh snapshot
+
     await load();
-    statusEl.textContent = 'Check the status above, and watch for a notification with the result.';
+    statusEl.textContent = 'Updated with the real current state.';
     setTimeout(() => { statusEl.textContent = ''; }, 8000);
   } catch (err) {
     statusEl.textContent = 'Failed to send command \u2014 try again.';
