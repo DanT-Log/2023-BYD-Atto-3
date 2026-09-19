@@ -893,7 +893,6 @@
       <div class="group">
         <div class="group-header" data-i18n="efficiency_header">Efficiency</div>
         <div class="group-card">
-          <div class="row"><span class="k" data-i18n="tracked_efficiency">Your tracked efficiency</span><span class="v" id="tracked-efficiency">—</span></div>
           <div class="row"><span class="k" data-i18n="car_efficiency">Car's own estimate</span><span class="v" id="car-efficiency">—</span></div>
           <div class="row"><span class="k" data-i18n="real_world_range">Estimated real range</span><span class="v" id="real-world-range">—</span></div>
           <div class="row"><span class="k" data-i18n="wltp_range">vs WLTP (420 km)</span><span class="v" id="wltp-variance">—</span></div>
@@ -939,11 +938,6 @@
       <div class="group">
         <div class="group-header" data-i18n="insights_header">Insights</div>
         <div class="group-card" id="insights-card"></div>
-      </div>
-
-      <div class="group fun-group">
-        <div class="group-header" data-i18n="fun_header">Just For Fun</div>
-        <div class="group-card fun-card" id="petrol-fun"></div>
       </div>
 
       <div class="group">
@@ -1361,8 +1355,6 @@ function applyPeriod() {
   const overlapping = allSessions.filter(s => sessionOverlapFraction(s, since, now) > 0);
   renderSummary(computeSummary(overlapping, since, now));
   renderSpendChart(activePeriod);
-  renderPetrolFun(overlapping);
-  renderTrackedEfficiency();
 
   document.querySelectorAll('#period-tabs button').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.period === activePeriod);
@@ -1694,51 +1686,6 @@ function renderSpendChart(period) {
     const dateStr = b.fullDate.toLocaleDateString(localeStr(), b.fullDateOpts);
     readoutEl.textContent = t('chart_readout_value', { date: dateStr, amount: fmtMoney(b.value) });
   };
-}
-
-async function renderPetrolFun(sessions) {
-  const el = document.getElementById('petrol-fun');
-  try {
-    const settingsRows = await sb('tracker_settings?select=*');
-    const settings = settingsRows[0] || {};
-    const totalKm = sessions.reduce((sum, s) => sum + (Number(s.km_since_last_charge) || 0), 0);
-
-    if (totalKm <= 0) {
-      el.innerHTML = `<div class="fun-line">${t('fun_empty')}</div>`;
-      return;
-    }
-
-    // Compare against the electricity cost of the energy actually USED
-    // driving those km -- not total charging spend in the period, which
-    // conflates "topping the battery up for later" with "cost of this
-    // driving" and produces a misleading (even negative) result whenever
-    // you charge more than you've driven since.
-    const rangeStart = periodStart(activePeriod);
-    const rangeEnd = new Date();
-    const trackedEfficiency = computeTrackedEfficiency(allSessions, rangeStart, rangeEnd); // kWh/100km
-    const periodKwh = sessions.reduce((sum, s) => sum + (Number(s.energy_added_kwh) || 0), 0);
-    const periodCost = sessions.reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
-    const avgCostPerKwh = periodKwh > 0 ? periodCost / periodKwh : settings.home_rate_per_kwh;
-
-    const litresEquivalent = (totalKm / 100) * settings.petrol_l_per_100km;
-    const petrolCost = litresEquivalent * settings.petrol_price_per_l;
-    const electricityCostOfDriving = trackedEfficiency != null && avgCostPerKwh != null
-      ? (totalKm / 100) * trackedEfficiency * avgCostPerKwh
-      : null;
-    const savings = electricityCostOfDriving != null ? petrolCost - electricityCostOfDriving : null;
-    const co2Kg = litresEquivalent * 2.31; // kg CO2 per litre of petrol, standard factor
-
-    el.innerHTML = `
-      <div class="fun-line">${t('fun_petrol_cost', { km: `<b>${totalKm.toFixed(0)}</b>`, cost: `<b>${fmtMoney(petrolCost)}</b>` })}</div>
-      ${electricityCostOfDriving != null ? `
-        <div class="fun-line" style="margin-top:8px;">${t('fun_savings', { spent: `<b>${fmtMoney(electricityCostOfDriving)}</b>`, savings: `<b>${fmtMoney(savings)}</b>`, co2: `<b>${co2Kg.toFixed(0)}</b>` })}</div>
-      ` : ''}
-      <div class="fun-note">${t('fun_assumes', { l: settings.petrol_l_per_100km, price: fmtMoney(settings.petrol_price_per_l) })}</div>
-    `;
-  } catch (err) {
-    el.innerHTML = '';
-    console.error('petrol fun facts failed', err);
-  }
 }
 
 // ---------- Insights ----------
@@ -2134,14 +2081,6 @@ document.getElementById('expense-save-btn').addEventListener('click', async () =
     console.error(err);
   }
 });
-
-function renderTrackedEfficiency() {
-  const rangeStart = periodStart(activePeriod);
-  const rangeEnd = new Date();
-  const tracked = computeTrackedEfficiency(allSessions, rangeStart, rangeEnd);
-  document.getElementById('tracked-efficiency').textContent =
-    tracked != null ? `${tracked.toFixed(1)} kWh/100km` : 'Not enough data yet';
-}
 
 async function loadCarEfficiency() {
   try {
