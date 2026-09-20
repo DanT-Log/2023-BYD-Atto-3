@@ -998,6 +998,12 @@
           </div>
         </div>
         <div class="group">
+          <div class="group-header" data-i18n="polling_header">Polling</div>
+          <div class="group-card">
+            <div class="settings-row"><label data-i18n="poll_interval">Poll interval (minutes)</label><input type="number" step="1" min="5" max="60" id="s-poll-interval"></div>
+          </div>
+        </div>
+        <div class="group">
           <div class="group-header" data-i18n="petrol_header">Petrol Comparison</div>
           <div class="group-card">
             <div class="settings-row"><label data-i18n="petrol_price">Petrol price ($/L)</label><input type="number" step="0.01" min="0" id="s-petrol-price"></div>
@@ -1086,6 +1092,7 @@ const TRANSLATIONS = {
     rates_header: "Rates", home_rate: "Home rate ($/kWh)", public_rate: "Public rate default ($/kWh)",
     vehicle_header: "Vehicle", battery_capacity: "Battery capacity (kWh)",
     home_detection_header: "Home Detection", home_radius: "Home radius (metres)",
+    polling_header: "Polling", poll_interval: "Poll interval (minutes)",
     petrol_header: "Petrol Comparison", petrol_price: "Petrol price ($/L)", petrol_consumption: "Petrol consumption (L/100km)",
     save_settings: "Save Settings", saved: "Saved.", save_failed: "Failed to save \u2014 try again.",
     invalid_numbers: "All fields must be valid, non-negative numbers.",
@@ -1189,6 +1196,7 @@ const TRANSLATIONS = {
     rates_header: "Gi\u00e1 \u0111i\u1ec7n", home_rate: "Gi\u00e1 t\u1ea1i nh\u00e0 ($/kWh)", public_rate: "Gi\u00e1 c\u00f4ng c\u1ed9ng m\u1eb7c \u0111\u1ecbnh ($/kWh)",
     vehicle_header: "Xe", battery_capacity: "Dung l\u01b0\u1ee3ng pin (kWh)",
     home_detection_header: "Nh\u1eadn di\u1ec7n v\u1ecb tr\u00ed nh\u00e0", home_radius: "B\u00e1n k\u00ednh nh\u00e0 (m\u00e9t)",
+    polling_header: "T\u1ea7n su\u1ea5t ki\u1ec3m tra", poll_interval: "T\u1ea7n su\u1ea5t ki\u1ec3m tra (ph\u00fat)",
     petrol_header: "So s\u00e1nh v\u1edbi x\u0103ng", petrol_price: "Gi\u00e1 x\u0103ng ($/L)", petrol_consumption: "M\u1ee9c ti\u00eau th\u1ee5 x\u0103ng (L/100km)",
     save_settings: "L\u01b0u c\u00e0i \u0111\u1eb7t", saved: "\u0110\u00e3 l\u01b0u.", save_failed: "L\u01b0u th\u1ea5t b\u1ea1i \u2014 th\u1eed l\u1ea1i.",
     invalid_numbers: "T\u1ea5t c\u1ea3 c\u00e1c tr\u01b0\u1eddng ph\u1ea3i l\u00e0 s\u1ed1 h\u1ee3p l\u1ec7, kh\u00f4ng \u00e2m.",
@@ -2436,6 +2444,7 @@ async function populateSettingsForm() {
   document.getElementById('s-public-rate').value = s.public_rate_per_kwh ?? '';
   document.getElementById('s-battery-capacity').value = s.battery_capacity_kwh ?? '';
   document.getElementById('s-home-radius').value = s.home_radius_m ?? '';
+  document.getElementById('s-poll-interval').value = s.poll_interval_minutes ?? '';
   document.getElementById('s-petrol-price').value = s.petrol_price_per_l ?? '';
   document.getElementById('s-petrol-consumption').value = s.petrol_l_per_100km ?? '';
 }
@@ -2453,6 +2462,7 @@ document.getElementById('settings-save-btn').addEventListener('click', async () 
     public_rate_per_kwh: parseFloat(document.getElementById('s-public-rate').value),
     battery_capacity_kwh: parseFloat(document.getElementById('s-battery-capacity').value),
     home_radius_m: parseFloat(document.getElementById('s-home-radius').value),
+    poll_interval_minutes: parseFloat(document.getElementById('s-poll-interval').value),
     petrol_price_per_l: parseFloat(document.getElementById('s-petrol-price').value),
     petrol_l_per_100km: parseFloat(document.getElementById('s-petrol-consumption').value),
   };
