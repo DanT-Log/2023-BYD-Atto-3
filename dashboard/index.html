@@ -99,9 +99,9 @@
   #lock-icon-unlocked{ color: var(--green); }
 
   .quick-triggers{
-    display: none;
+    display: flex;
     gap: 8px;
-    margin: 0 0 14px;
+    padding: 12px;
   }
   .quick-trigger-btn{
     flex: 1;
@@ -822,11 +822,6 @@
     </div>
     <div class="push-status" id="push-status"></div>
 
-    <div class="quick-triggers" id="quick-triggers" style="display:none;">
-      <button class="quick-trigger-btn" data-poll-min="5">Poll every 5 min</button>
-      <button class="quick-trigger-btn" data-poll-min="60">Poll every 60 min</button>
-    </div>
-
     <div class="tab-panel" data-panel="status">
       <div class="status-card" id="status-card">
         <div class="status-top">
@@ -865,6 +860,14 @@
         <div class="group-header" data-i18n="last_charge_header">Last Charge</div>
         <div class="group-card" id="last-charge-card">
           <div class="empty" data-i18n="no_charges_yet">No charges recorded yet.</div>
+        </div>
+      </div>
+
+      <div class="group" id="quick-triggers-group" style="display:none;">
+        <div class="group-header">Quick Poll Interval</div>
+        <div class="group-card quick-triggers" id="quick-triggers">
+          <button class="quick-trigger-btn" data-poll-min="5">Poll every 5 min</button>
+          <button class="quick-trigger-btn" data-poll-min="60">Poll every 60 min</button>
         </div>
       </div>
     </div>
@@ -2467,7 +2470,7 @@ async function unlockApp() {
 
   appUnlocked = true;
   updateLockIcon();
-  document.getElementById('quick-triggers').style.display = 'flex';
+  document.getElementById('quick-triggers-group').style.display = 'block';
   await populateSettingsForm();
   document.getElementById('settings-locked').style.display = 'none';
   document.getElementById('settings-form').style.display = 'block';
@@ -2485,6 +2488,19 @@ function updateLockIcon() {
   document.getElementById('global-lock-btn').setAttribute('aria-label', appUnlocked ? 'Unlocked' : 'Unlock');
 }
 
+async function lockApp() {
+  appUnlocked = false;
+  updateLockIcon();
+  document.getElementById('quick-triggers-group').style.display = 'none';
+  document.getElementById('location-locked').style.display = 'block';
+  document.getElementById('location-unlocked').style.display = 'none';
+  document.getElementById('settings-locked').style.display = 'block';
+  document.getElementById('settings-form').style.display = 'none';
+  // Re-render Last Charge and Recent Charges so their location labels
+  // hide again immediately, matching everything else re-locking.
+  await load();
+}
+
 async function populateSettingsForm() {
   const rows = await sb('tracker_settings?select=*');
   const s = rows[0] || {};
@@ -2498,7 +2514,10 @@ async function populateSettingsForm() {
 }
 
 document.getElementById('settings-unlock-btn').addEventListener('click', unlockApp);
-document.getElementById('global-lock-btn').addEventListener('click', unlockApp);
+document.getElementById('global-lock-btn').addEventListener('click', () => {
+  if (appUnlocked) lockApp();
+  else unlockApp();
+});
 
 document.getElementById('quick-triggers').addEventListener('click', async (e) => {
   const btn = e.target.closest('.quick-trigger-btn');
