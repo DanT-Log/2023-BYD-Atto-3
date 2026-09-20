@@ -319,8 +319,41 @@ async def fetch_vehicle_state() -> dict:
         }
 
 
+def get_poll_interval_minutes() -> int:
+    """Reads the user-configurable poll interval from tracker_settings.
+    Defaults to 5 (matching the underlying pg_cron trigger rate) if the
+    setting is missing or invalid for any reason -- never let a bad
+    reading here silently disable polling.
+    """
+    try:
+        rows = sb_get("tracker_settings", {"select": "poll_interval_minutes"})
+        value = rows[0].get("poll_interval_minutes") if rows else None
+        return int(value) if value else 5
+    except Exception as exc:  # noqa: BLE001
+        print(f"warning: could not read poll_interval_minutes, defaulting to 5: {exc}", file=sys.stderr)
+        return 5
+
+
+def should_throttle(prev_snapshot: dict | None, interval_minutes: int) -> bool:
+    """True if it's too soon to poll again, per the configured interval.
+    The underlying pg_cron trigger still fires every 5 minutes regardless
+    -- this can only make effective polling SLOWER than that baseline,
+    never faster, since a run that arrives before the interval has
+    elapsed just skips the actual BYD API call and exits.
+    """
+    if prev_snapshot is None or interval_minutes <= 5:
+        return False
+    elapsed_min = (datetime.now(timezone.utc) - parse_ts(prev_snapshot["recorded_at"])).total_seconds() / 60
+    return elapsed_min < interval_minutes
+
+
 def main() -> None:
     prev_snapshot = get_last_snapshot()
+    interval_minutes = get_poll_interval_minutes()
+    if should_throttle(prev_snapshot, interval_minutes):
+        print(f"throttled: configured interval is {interval_minutes} min, last poll was {prev_snapshot['recorded_at']}, skipping this run")
+        return
+
     state = asyncio.run(fetch_vehicle_state())
     now = datetime.now(timezone.utc).isoformat()
 
