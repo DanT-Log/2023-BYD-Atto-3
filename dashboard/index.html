@@ -95,6 +95,27 @@
   .icon-btn svg{ width: 18px; height: 18px; transition: transform .6s cubic-bezier(.2,.9,.3,1); }
   #refresh-btn.spinning svg{ transform: rotate(360deg); }
   #poll-now-btn{ color: var(--orange); }
+  .lock-btn{ color: var(--blue); }
+  #lock-icon-unlocked{ color: var(--green); }
+
+  .quick-triggers{
+    display: none;
+    gap: 8px;
+    margin: 0 0 14px;
+  }
+  .quick-trigger-btn{
+    flex: 1;
+    padding: 9px;
+    border-radius: 10px;
+    border: 1px solid var(--blue);
+    background: transparent;
+    color: var(--blue);
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 590;
+    cursor: pointer;
+  }
+  .quick-trigger-btn:active{ opacity: 0.5; }
 
   .stop-attempt-btn{
     display: block;
@@ -272,6 +293,7 @@
     background: var(--green);
   }
   .avatar.public{ background: var(--blue); }
+  .avatar.locked{ background: var(--text-secondary); }
   .avatar svg{ width: 17px; height: 17px; }
 
   .session-mid{ flex: 1; min-width: 0; }
@@ -792,9 +814,18 @@
             <path d="M21 4v5h-5"/>
           </svg>
         </button>
+        <button class="icon-btn lock-btn" id="global-lock-btn" aria-label="Unlock">
+          <svg id="lock-icon-locked" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+          <svg id="lock-icon-unlocked" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 7.75-3.9"/></svg>
+        </button>
       </div>
     </div>
     <div class="push-status" id="push-status"></div>
+
+    <div class="quick-triggers" id="quick-triggers" style="display:none;">
+      <button class="quick-trigger-btn" data-poll-min="5">Poll every 5 min</button>
+      <button class="quick-trigger-btn" data-poll-min="60">Poll every 60 min</button>
+    </div>
 
     <div class="tab-panel" data-panel="status">
       <div class="status-card" id="status-card">
@@ -819,7 +850,6 @@
             </div>
             <div class="location-text" data-i18n="location_hidden">Hidden until unlocked</div>
           </div>
-          <button class="settings-unlock-btn location-unlock-btn" id="location-unlock-btn" data-i18n="enter_passkey">Enter Passkey</button>
         </div>
         <div class="group-card location-card" id="location-unlocked" style="display:none;">
           <div class="location-row">
@@ -1274,6 +1304,7 @@ const SUPABASE_KEY = "sb_publishable_MYvAXGlFH-AyOkGU-FceYg_THPLZqCy";
 
 const ICON_HOME = `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H9a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h2.5a1 1 0 0 0 1-1v-9"/></svg>`;
 const ICON_PUBLIC = `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.1 7-11.5A7 7 0 0 0 5 9.5C5 14.9 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.3"/></svg>`;
+const ICON_LOCKED = `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>`;
 
 async function sb(path) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -1380,11 +1411,13 @@ function renderSessions(sessions) {
 
   el.innerHTML = done.map(s => {
     const isHome = s.location_type === 'home';
-    const placeLabel = isHome ? t('home') : t('public_charger');
+    const placeLabel = appUnlocked ? (isHome ? t('home') : t('public_charger')) : t('location_hidden');
+    const avatarClass = appUnlocked ? (isHome ? '' : 'public') : 'locked';
+    const avatarIcon = appUnlocked ? (isHome ? ICON_HOME : ICON_PUBLIC) : ICON_LOCKED;
     const timeRange = `${fmtTime(s.started_at)}–${fmtTime(s.ended_at)}`;
     return `
       <a class="session" href="session.html?id=${s.id}">
-        <div class="avatar ${isHome ? '' : 'public'}">${isHome ? ICON_HOME : ICON_PUBLIC}</div>
+        <div class="avatar ${avatarClass}">${avatarIcon}</div>
         <div class="session-mid">
           <div class="session-title">${s.start_pct != null && s.end_pct != null ? `${s.start_pct}% → ${s.end_pct}%` : fmtDate(s.started_at)}</div>
           <div class="session-sub">${fmtDate(s.started_at)}, ${timeRange} · ${fmtKwh(s.energy_added_kwh)}</div>
@@ -2128,12 +2161,15 @@ function renderLastChargeCard(mostRecent) {
   }
   const isHome = mostRecent.location_type === 'home';
   const kmStr = mostRecent.km_since_last_charge != null ? ` \u00b7 ${fmtKm(mostRecent.km_since_last_charge)} ${t('driven_since_prev')}` : '';
+  const placeStr = appUnlocked ? (isHome ? t('home') : t('public_charger')) : '';
+  const avatarClass = appUnlocked ? (isHome ? '' : 'public') : 'locked';
+  const avatarIcon = appUnlocked ? (isHome ? ICON_HOME : ICON_PUBLIC) : ICON_LOCKED;
   el.innerHTML = `
     <a href="session.html?id=${mostRecent.id}" class="last-charge-row" style="text-decoration:none; color:inherit;">
-      <div class="avatar ${isHome ? '' : 'public'}">${isHome ? ICON_HOME : ICON_PUBLIC}</div>
+      <div class="avatar ${avatarClass}">${avatarIcon}</div>
       <div class="last-charge-mid">
         <div class="last-charge-title">${mostRecent.start_pct}% \u2192 ${mostRecent.end_pct}%</div>
-        <div class="last-charge-sub">${fmtDate(mostRecent.started_at)} \u00b7 ${fmtKwh(mostRecent.energy_added_kwh)} \u00b7 ${isHome ? t('home') : t('public_charger')}${kmStr}</div>
+        <div class="last-charge-sub">${fmtDate(mostRecent.started_at)} \u00b7 ${fmtKwh(mostRecent.energy_added_kwh)}${placeStr ? ` \u00b7 ${placeStr}` : ''}${kmStr}</div>
       </div>
       <div class="last-charge-cost">${fmtMoney(mostRecent.cost)}</div>
     </a>
@@ -2430,11 +2466,23 @@ async function unlockApp() {
   }
 
   appUnlocked = true;
+  updateLockIcon();
+  document.getElementById('quick-triggers').style.display = 'flex';
   await populateSettingsForm();
   document.getElementById('settings-locked').style.display = 'none';
   document.getElementById('settings-form').style.display = 'block';
   await revealLocation();
+  // Last Charge card and Recent Charges also reveal location once
+  // unlocked -- re-render the whole page's data rather than picking
+  // individual functions, so nothing gated is missed.
+  await load();
   return true;
+}
+
+function updateLockIcon() {
+  document.getElementById('lock-icon-locked').style.display = appUnlocked ? 'none' : 'block';
+  document.getElementById('lock-icon-unlocked').style.display = appUnlocked ? 'block' : 'none';
+  document.getElementById('global-lock-btn').setAttribute('aria-label', appUnlocked ? 'Unlocked' : 'Unlock');
 }
 
 async function populateSettingsForm() {
@@ -2450,7 +2498,42 @@ async function populateSettingsForm() {
 }
 
 document.getElementById('settings-unlock-btn').addEventListener('click', unlockApp);
-document.getElementById('location-unlock-btn').addEventListener('click', unlockApp);
+document.getElementById('global-lock-btn').addEventListener('click', unlockApp);
+
+document.getElementById('quick-triggers').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.quick-trigger-btn');
+  if (!btn) return;
+  const minutes = Number(btn.dataset.pollMin);
+
+  const passkey = await getPasskey();
+  if (!passkey) return;
+
+  showLoadingOverlay(`Setting poll interval to ${minutes} min\u2026`);
+  try {
+    let res = await fetch(`${SUPABASE_URL}/functions/v1/edit-settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passkey, poll_interval_minutes: minutes }),
+    });
+    if (res.status === 401) {
+      clearStoredPasskey();
+      hideLoadingOverlay();
+      const retryKey = await getPasskey(t('passkey_wrong'));
+      if (!retryKey) return;
+      showLoadingOverlay(`Setting poll interval to ${minutes} min\u2026`);
+      res = await fetch(`${SUPABASE_URL}/functions/v1/edit-settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ passkey: retryKey, poll_interval_minutes: minutes }),
+      });
+    }
+    if (!res.ok) throw new Error('save failed');
+    showResultOverlay(true, `Poll interval set to ${minutes} minutes.`);
+  } catch (err) {
+    console.error(err);
+    showResultOverlay(false, 'Failed to set poll interval \u2014 try again.');
+  }
+});
 
 document.getElementById('settings-save-btn').addEventListener('click', async () => {
   const status = document.getElementById('settings-status');
