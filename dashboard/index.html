@@ -2179,27 +2179,44 @@ function renderLastChargeCard(mostRecent) {
   `;
 }
 
-async function load() {
+async function safeRun(label, fn) {
   try {
-    const sessions = await sb('charging_sessions_detailed?select=*&order=started_at.desc&limit=100');
+    await fn();
+  } catch (err) {
+    console.error(`${label} failed (isolated, rest of load() continues):`, err);
+  }
+}
+
+async function load() {
+  let sessions = [];
+  try {
+    sessions = await sb('charging_sessions_detailed?select=*&order=started_at.desc&limit=100');
     allSessions = sessions.filter(s => s.ended_at);
-    applyPeriod();
-    renderSessions(sessions);
-    renderLastChargeCard(allSessions[0]);
-    renderInsights(allSessions);
-    await renderRecords(allSessions);
-    await loadLiveStatus();
-    await loadLocationCard();
-    await loadCarEfficiency();
-    await renderBatteryHealth(allSessions);
-    await renderStandbyLoss();
-    const capRows = await sb('tracker_settings?select=battery_capacity_kwh');
-    renderRealWorldRange(allSessions, capRows[0]?.battery_capacity_kwh);
-    await loadOwnership(allSessions);
   } catch (err) {
     document.getElementById('total-spent-sub').textContent = 'Failed to load — check back shortly';
-    console.error(err);
+    console.error('session fetch failed, aborting load():', err);
+    return;
   }
+
+  // Each card below is isolated: a failure in one (a bad reference, an
+  // unexpected null, an API hiccup) must never prevent the others --
+  // especially the live status, which is the whole point of polling --
+  // from still updating with the fresh data that was actually fetched.
+  await safeRun('applyPeriod', () => applyPeriod());
+  await safeRun('renderSessions', () => renderSessions(sessions));
+  await safeRun('renderLastChargeCard', () => renderLastChargeCard(allSessions[0]));
+  await safeRun('renderInsights', () => renderInsights(allSessions));
+  await safeRun('renderRecords', () => renderRecords(allSessions));
+  await safeRun('loadLiveStatus', () => loadLiveStatus());
+  await safeRun('loadLocationCard', () => loadLocationCard());
+  await safeRun('loadCarEfficiency', () => loadCarEfficiency());
+  await safeRun('renderBatteryHealth', () => renderBatteryHealth(allSessions));
+  await safeRun('renderStandbyLoss', () => renderStandbyLoss());
+  await safeRun('renderRealWorldRange', async () => {
+    const capRows = await sb('tracker_settings?select=battery_capacity_kwh');
+    renderRealWorldRange(allSessions, capRows[0]?.battery_capacity_kwh);
+  });
+  await safeRun('loadOwnership', () => loadOwnership(allSessions));
 }
 
 document.getElementById('period-tabs').addEventListener('click', (e) => {
