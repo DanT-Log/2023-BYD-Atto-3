@@ -340,7 +340,14 @@ def should_throttle(prev_snapshot: dict | None, interval_minutes: int) -> bool:
     -- this can only make effective polling SLOWER than that baseline,
     never faster, since a run that arrives before the interval has
     elapsed just skips the actual BYD API call and exits.
+
+    A manual "Poll Now" always sets FORCE_POLL=true and bypasses this
+    entirely -- without that, pressing Poll Now while a slower interval
+    is configured would silently do nothing, which defeats the point of
+    a manual override.
     """
+    if os.environ.get("FORCE_POLL") == "true":
+        return False
     if prev_snapshot is None or interval_minutes <= 5:
         return False
     elapsed_min = (datetime.now(timezone.utc) - parse_ts(prev_snapshot["recorded_at"])).total_seconds() / 60

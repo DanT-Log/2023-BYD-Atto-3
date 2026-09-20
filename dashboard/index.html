@@ -2405,7 +2405,7 @@ async function sendControlAction(action, btn, statusEl, passkey) {
 
     updateLoadingOverlay('Checking the real current state\u2026');
     try {
-      await fetch(TRIGGER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      await fetch(TRIGGER_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passkey }) });
     } catch (err) {
       console.error('follow-up poll trigger failed', err);
     }

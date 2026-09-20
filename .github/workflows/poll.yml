@@ -7,7 +7,18 @@ on:
   # NOT used here -- it's documented as best-effort and was observed
   # skipping ticks (a 23-minute gap during testing). Supabase's
   # Postgres-level pg_cron is the reliable clock instead.
-  workflow_dispatch: {}
+  #
+  # "force" bypasses poll.py's configurable-interval throttle -- the
+  # automatic pg_cron path always passes false (respects whatever
+  # interval is set in Settings), while a manual "Poll Now" from the
+  # dashboard always passes true, so it never silently does nothing
+  # just because a slower interval happens to be configured.
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Bypass the configured poll interval'
+        required: false
+        default: 'false'
 
 jobs:
   poll:
@@ -32,3 +43,4 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          FORCE_POLL: ${{ github.event.inputs.force }}
