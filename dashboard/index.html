@@ -857,6 +857,14 @@
       </div>
 
       <div class="group">
+        <div class="group-header">Vehicle</div>
+        <div class="group-card" id="vehicle-card">
+          <div class="row"><span class="k">Odometer</span><span class="v" id="vehicle-odometer">—</span></div>
+          <div class="row"><span class="k">Doors &amp; Windows</span><span class="v" id="vehicle-security">—</span></div>
+        </div>
+      </div>
+
+      <div class="group">
         <div class="group-header" data-i18n="last_charge_header">Last Charge</div>
         <div class="group-card" id="last-charge-card">
           <div class="empty" data-i18n="no_charges_yet">No charges recorded yet.</div>
@@ -2137,6 +2145,55 @@ async function loadCarEfficiency() {
   }
 }
 
+// Reads odometer + door/window/lock status straight from the raw API
+// payload we already store on every poll -- no schema change needed.
+// Door/window fields use 0 = closed and lock fields use 1 = locked,
+// based on samples observed while the car was genuinely closed and
+// locked; window "open" is read from the _pct fields (0 = fully
+// closed) since those are unambiguous, rather than the paired boolean
+// fields whose exact meaning wasn't fully certain from samples alone.
+async function renderVehicleInfo() {
+  try {
+    const rows = await sb('vehicle_snapshots?select=raw&order=recorded_at.desc&limit=1');
+    const rt = rows[0]?.raw?.realtime;
+    if (!rt) return;
+
+    const odometer = rt.total_mileage;
+    document.getElementById('vehicle-odometer').textContent = odometer != null ? `${Number(odometer).toLocaleString()} km` : '—';
+
+    const openItems = [];
+    const doorMap = { left_front_door: 'Front left door', right_front_door: 'Front right door', left_rear_door: 'Rear left door', right_rear_door: 'Rear right door' };
+    for (const [field, label] of Object.entries(doorMap)) {
+      if (Number(rt[field]) !== 0) openItems.push(label);
+    }
+    const windowMap = { left_front_window_pct: 'Front left window', right_front_window_pct: 'Front right window', left_rear_window_pct: 'Rear left window', right_rear_window_pct: 'Rear right window' };
+    for (const [field, label] of Object.entries(windowMap)) {
+      if (Number(rt[field]) > 0) openItems.push(label);
+    }
+    if (Number(rt.trunk_lid) !== 0) openItems.push('Boot');
+
+    const lockMap = { left_front_door_lock: 'Front left', right_front_door_lock: 'Front right', left_rear_door_lock: 'Rear left', right_rear_door_lock: 'Rear right' };
+    const unlockedItems = [];
+    for (const [field, label] of Object.entries(lockMap)) {
+      if (Number(rt[field]) !== 1) unlockedItems.push(label);
+    }
+
+    const el = document.getElementById('vehicle-security');
+    if (openItems.length === 0 && unlockedItems.length === 0) {
+      el.textContent = 'All secure';
+      el.style.color = '';
+    } else {
+      const parts = [];
+      if (openItems.length) parts.push(`Open: ${openItems.join(', ')}`);
+      if (unlockedItems.length) parts.push(`Unlocked: ${unlockedItems.join(', ')}`);
+      el.textContent = parts.join(' \u00b7 ');
+      el.style.color = 'var(--orange)';
+    }
+  } catch (err) {
+    console.error('vehicle info failed', err);
+  }
+}
+
 async function loadLocationCard() {
   if (!appUnlocked) return; // stays on the locked placeholder until unlocked
   const el = document.getElementById('location-text');
@@ -2209,6 +2266,7 @@ async function load() {
   await safeRun('renderRecords', () => renderRecords(allSessions));
   await safeRun('loadLiveStatus', () => loadLiveStatus());
   await safeRun('loadLocationCard', () => loadLocationCard());
+  await safeRun('renderVehicleInfo', () => renderVehicleInfo());
   await safeRun('loadCarEfficiency', () => loadCarEfficiency());
   await safeRun('renderBatteryHealth', () => renderBatteryHealth(allSessions));
   await safeRun('renderStandbyLoss', () => renderStandbyLoss());
