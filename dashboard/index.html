@@ -2172,10 +2172,14 @@ async function renderVehicleInfo() {
     }
     if (Number(rt.trunk_lid) !== 0) openItems.push('Boot');
 
+    // Confirmed via real-world test (car deliberately unlocked, then
+    // locked, checked against fresh polls both times): 2 = locked,
+    // 1 = unlocked. The original assumption (1 = locked) was wrong and
+    // had this check exactly inverted.
     const lockMap = { left_front_door_lock: 'Front left', right_front_door_lock: 'Front right', left_rear_door_lock: 'Rear left', right_rear_door_lock: 'Rear right' };
     const unlockedItems = [];
     for (const [field, label] of Object.entries(lockMap)) {
-      if (Number(rt[field]) !== 1) unlockedItems.push(label);
+      if (Number(rt[field]) !== 2) unlockedItems.push(label);
     }
 
     const el = document.getElementById('vehicle-security');
