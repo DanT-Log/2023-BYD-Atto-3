@@ -745,6 +745,12 @@
     background: var(--bg);
     color: var(--text);
   }
+  .settings-note{
+    font-size: 12px;
+    color: var(--orange);
+    padding: 8px 16px 0;
+    line-height: 1.4;
+  }
   .settings-save-btn{
     display: block;
     width: 100%;
@@ -1045,6 +1051,13 @@
           </div>
         </div>
         <div class="group">
+          <div class="group-header" data-i18n="auto_stop_header">Auto-Stop Charging</div>
+          <div class="group-card">
+            <div class="settings-row"><label data-i18n="auto_stop_pct">Stop at % (blank = off)</label><input type="number" step="1" min="20" max="100" id="s-auto-stop-pct" placeholder="off"></div>
+          </div>
+          <div class="settings-note" id="auto-stop-note" data-i18n="auto_stop_note">Experimental: retries every poll until the car actually stops. Not guaranteed to work every time -- always double-check.</div>
+        </div>
+        <div class="group">
           <div class="group-header" data-i18n="petrol_header">Petrol Comparison</div>
           <div class="group-card">
             <div class="settings-row"><label data-i18n="petrol_price">Petrol price ($/L)</label><input type="number" step="0.01" min="0" id="s-petrol-price"></div>
@@ -1134,6 +1147,8 @@ const TRANSLATIONS = {
     vehicle_header: "Vehicle", battery_capacity: "Battery capacity (kWh)",
     home_detection_header: "Home Detection", home_radius: "Home radius (metres)",
     polling_header: "Polling", poll_interval: "Poll interval (minutes)",
+    auto_stop_header: "Auto-Stop Charging", auto_stop_pct: "Stop at % (blank = off)",
+    auto_stop_note: "Experimental: retries every poll until the car actually stops. Not guaranteed to work every time \u2014 always double-check.",
     petrol_header: "Petrol Comparison", petrol_price: "Petrol price ($/L)", petrol_consumption: "Petrol consumption (L/100km)",
     save_settings: "Save Settings", saved: "Saved.", save_failed: "Failed to save \u2014 try again.",
     invalid_numbers: "All fields must be valid, non-negative numbers.",
@@ -1238,6 +1253,8 @@ const TRANSLATIONS = {
     vehicle_header: "Xe", battery_capacity: "Dung l\u01b0\u1ee3ng pin (kWh)",
     home_detection_header: "Nh\u1eadn di\u1ec7n v\u1ecb tr\u00ed nh\u00e0", home_radius: "B\u00e1n k\u00ednh nh\u00e0 (m\u00e9t)",
     polling_header: "T\u1ea7n su\u1ea5t ki\u1ec3m tra", poll_interval: "T\u1ea7n su\u1ea5t ki\u1ec3m tra (ph\u00fat)",
+    auto_stop_header: "T\u1ef1 \u0111\u1ed9ng d\u1eebng s\u1ea1c", auto_stop_pct: "D\u1eebng \u1edf % (\u0111\u1ec3 tr\u1ed1ng = t\u1eaft)",
+    auto_stop_note: "Th\u1eed nghi\u1ec7m: th\u1eed l\u1ea1i m\u1ed7i l\u1ea7n ki\u1ec3m tra cho \u0111\u1ebfn khi xe th\u1ef1c s\u1ef1 d\u1eebng. Kh\u00f4ng \u0111\u1ea3m b\u1ea3o ho\u1ea1t \u0111\u1ed9ng m\u1ecdi l\u1ea7n \u2014 lu\u00f4n ki\u1ec3m tra l\u1ea1i.",
     petrol_header: "So s\u00e1nh v\u1edbi x\u0103ng", petrol_price: "Gi\u00e1 x\u0103ng ($/L)", petrol_consumption: "M\u1ee9c ti\u00eau th\u1ee5 x\u0103ng (L/100km)",
     save_settings: "L\u01b0u c\u00e0i \u0111\u1eb7t", saved: "\u0110\u00e3 l\u01b0u.", save_failed: "L\u01b0u th\u1ea5t b\u1ea1i \u2014 th\u1eed l\u1ea1i.",
     invalid_numbers: "T\u1ea5t c\u1ea3 c\u00e1c tr\u01b0\u1eddng ph\u1ea3i l\u00e0 s\u1ed1 h\u1ee3p l\u1ec7, kh\u00f4ng \u00e2m.",
@@ -2588,6 +2605,7 @@ async function populateSettingsForm() {
   document.getElementById('s-battery-capacity').value = s.battery_capacity_kwh ?? '';
   document.getElementById('s-home-radius').value = s.home_radius_m ?? '';
   document.getElementById('s-poll-interval').value = s.poll_interval_minutes ?? '';
+  document.getElementById('s-auto-stop-pct').value = s.auto_stop_at_pct ?? '';
   document.getElementById('s-petrol-price').value = s.petrol_price_per_l ?? '';
   document.getElementById('s-petrol-consumption').value = s.petrol_l_per_100km ?? '';
 }
@@ -2652,6 +2670,20 @@ document.getElementById('settings-save-btn').addEventListener('click', async () 
     status.classList.add('error');
     return;
   }
+
+  // Nullable and validated separately from the required fields above --
+  // blank means "turn auto-stop off", not an invalid number.
+  const autoStopRaw = document.getElementById('s-auto-stop-pct').value;
+  let autoStopValue = null;
+  if (autoStopRaw !== '') {
+    autoStopValue = parseFloat(autoStopRaw);
+    if (isNaN(autoStopValue) || autoStopValue < 20 || autoStopValue > 100) {
+      status.textContent = 'Auto-stop % must be between 20 and 100, or blank to turn off.';
+      status.classList.add('error');
+      return;
+    }
+  }
+  payload.auto_stop_at_pct = autoStopValue;
 
   let passkey = await getPasskey();
   if (!passkey) { status.textContent = ''; return; }
