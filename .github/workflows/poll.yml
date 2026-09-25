@@ -13,12 +13,21 @@ on:
   # interval is set in Settings), while a manual "Poll Now" from the
   # dashboard always passes true, so it never silently does nothing
   # just because a slower interval happens to be configured.
+  # "source" distinguishes the normal 5-min cron from the 1-min
+  # fast-charge-detection cron -- poll.py treats "fast" completely
+  # differently: it ONLY ever bypasses the throttle for genuine fast
+  # charging (>=5kW), never for any other reason, since the 1-min cron
+  # must never behave like a fast, always-on poll for normal charging.
   workflow_dispatch:
     inputs:
       force:
         description: 'Bypass the configured poll interval'
         required: false
         default: 'false'
+      source:
+        description: 'normal (5-min cron) or fast (1-min fast-charge cron)'
+        required: false
+        default: 'normal'
 
 jobs:
   poll:
@@ -44,3 +53,4 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           FORCE_POLL: ${{ github.event.inputs.force }}
+          TRIGGER_SOURCE: ${{ github.event.inputs.source }}

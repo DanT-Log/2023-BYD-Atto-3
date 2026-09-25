@@ -386,33 +386,48 @@ def get_poll_interval_minutes() -> int:
 FAST_CHARGE_KW_THRESHOLD = 5.0  # above this, assume DC fast charging and poll every ~1 min instead of the configured interval
 
 
-def should_throttle(prev_snapshot: dict | None, interval_minutes: int) -> bool:
-    """True if it's too soon to poll again, per the configured interval.
-    The underlying pg_cron trigger fires every 5 minutes as the normal
-    baseline, plus a second cron every 1 minute purely for fast-charge
-    resolution -- see the fast-charge check below. Together they mean
-    this can make effective polling SLOWER than 5 min (a configured
-    interval), or as fast as ~1 min during a detected fast charge, but
-    never faster than whichever cron actually fired.
+def should_throttle(prev_snapshot: dict | None, interval_minutes: int, trigger_source: str = "normal") -> bool:
+    """True if it's too soon to poll again.
 
-    A manual "Poll Now" always sets FORCE_POLL=true and bypasses this
-    entirely -- without that, pressing Poll Now while a slower interval
-    is configured would silently do nothing, which defeats the point of
-    a manual override.
+    Two crons exist: the normal one every 5 min (respects whatever
+    interval is configured in Settings, with a shortcut that never
+    throttles when that interval is <=5 min, since the cron itself
+    can't fire faster than that anyway), and a second one every 1 min
+    whose ONLY purpose is catching DC fast charging.
+
+    That 1-min cron must NEVER use the interval<=5 shortcut above --
+    doing so was a real bug: with the (very common) default 5-min
+    interval, every single 1-min trigger sailed through unthrottled
+    regardless of charging power, polling BYD every minute even during
+    normal slow AC charging. The fast cron's source is checked first
+    and handled as a completely separate rule: bypass ONLY for genuine
+    fast charging, throttle (skip) for literally everything else.
+
+    A manual "Poll Now" always sets FORCE_POLL=true and bypasses all of
+    this -- without that, pressing Poll Now while a slower interval is
+    configured would silently do nothing, defeating the point of a
+    manual override.
     """
     if os.environ.get("FORCE_POLL") == "true":
         return False
     if prev_snapshot is None:
         return False
 
-    # Fast charging detected from the last known reading -- bypass the
-    # configured interval so the 1-minute cron can actually do its job
-    # and resolve the ramp/taper shape, not just the slow-charging
-    # baseline cadence.
     prev_power = prev_snapshot.get("charging_power_kw")
-    if prev_snapshot.get("is_charging") and prev_power is not None and float(prev_power) >= FAST_CHARGE_KW_THRESHOLD:
-        return False
+    is_fast_charging = (
+        bool(prev_snapshot.get("is_charging"))
+        and prev_power is not None
+        and float(prev_power) >= FAST_CHARGE_KW_THRESHOLD
+    )
 
+    if trigger_source == "fast":
+        # This cron exists purely to catch fast charging -- skip
+        # (throttle) for every other case, full stop. No <=5 shortcut,
+        # no normal-interval fallback.
+        return not is_fast_charging
+
+    if is_fast_charging:
+        return False
     if interval_minutes <= 5:
         return False
     elapsed_min = (datetime.now(timezone.utc) - parse_ts(prev_snapshot["recorded_at"])).total_seconds() / 60
@@ -422,8 +437,9 @@ def should_throttle(prev_snapshot: dict | None, interval_minutes: int) -> bool:
 def main() -> None:
     prev_snapshot = get_last_snapshot()
     interval_minutes = get_poll_interval_minutes()
-    if should_throttle(prev_snapshot, interval_minutes):
-        print(f"throttled: configured interval is {interval_minutes} min, last poll was {prev_snapshot['recorded_at']}, skipping this run")
+    trigger_source = os.environ.get("TRIGGER_SOURCE", "normal")
+    if should_throttle(prev_snapshot, interval_minutes, trigger_source):
+        print(f"throttled: source={trigger_source}, configured interval is {interval_minutes} min, last poll was {prev_snapshot['recorded_at']}, skipping this run")
         return
 
     state = asyncio.run(fetch_vehicle_state())
