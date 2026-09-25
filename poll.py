@@ -383,12 +383,17 @@ def get_poll_interval_minutes() -> int:
         return 5
 
 
+FAST_CHARGE_KW_THRESHOLD = 5.0  # above this, assume DC fast charging and poll every ~1 min instead of the configured interval
+
+
 def should_throttle(prev_snapshot: dict | None, interval_minutes: int) -> bool:
     """True if it's too soon to poll again, per the configured interval.
-    The underlying pg_cron trigger still fires every 5 minutes regardless
-    -- this can only make effective polling SLOWER than that baseline,
-    never faster, since a run that arrives before the interval has
-    elapsed just skips the actual BYD API call and exits.
+    The underlying pg_cron trigger fires every 5 minutes as the normal
+    baseline, plus a second cron every 1 minute purely for fast-charge
+    resolution -- see the fast-charge check below. Together they mean
+    this can make effective polling SLOWER than 5 min (a configured
+    interval), or as fast as ~1 min during a detected fast charge, but
+    never faster than whichever cron actually fired.
 
     A manual "Poll Now" always sets FORCE_POLL=true and bypasses this
     entirely -- without that, pressing Poll Now while a slower interval
@@ -397,7 +402,18 @@ def should_throttle(prev_snapshot: dict | None, interval_minutes: int) -> bool:
     """
     if os.environ.get("FORCE_POLL") == "true":
         return False
-    if prev_snapshot is None or interval_minutes <= 5:
+    if prev_snapshot is None:
+        return False
+
+    # Fast charging detected from the last known reading -- bypass the
+    # configured interval so the 1-minute cron can actually do its job
+    # and resolve the ramp/taper shape, not just the slow-charging
+    # baseline cadence.
+    prev_power = prev_snapshot.get("charging_power_kw")
+    if prev_snapshot.get("is_charging") and prev_power is not None and float(prev_power) >= FAST_CHARGE_KW_THRESHOLD:
+        return False
+
+    if interval_minutes <= 5:
         return False
     elapsed_min = (datetime.now(timezone.utc) - parse_ts(prev_snapshot["recorded_at"])).total_seconds() / 60
     return elapsed_min < interval_minutes
