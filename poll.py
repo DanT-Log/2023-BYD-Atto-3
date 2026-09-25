@@ -41,6 +41,7 @@ import os
 import re
 import sys
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import requests
 from pybyd import BydClient, BydConfig
@@ -179,6 +180,54 @@ def classify_location(lat: float | None, lon: float | None, settings: dict) -> s
 
 
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC")
+VEHICLE_TZ = ZoneInfo("Australia/Sydney")
+
+
+def notify_auto_stop(success: bool, pct: float, threshold: int) -> None:
+    if not NTFY_TOPIC:
+        print("notify skipped: NTFY_TOPIC is not set", file=sys.stderr)
+        return
+
+    if success:
+        title = "BYD Atto 3 \u2014 auto-stop sent"
+        message = f"Battery reached {pct}% (limit: {threshold}%) \u2014 stop command sent. Will retry next poll if it doesn't take effect."
+    else:
+        title = "BYD Atto 3 \u2014 auto-stop FAILED"
+        message = f"Battery is at {pct}% (limit: {threshold}%) but the stop command errored. Will retry next poll \u2014 check manually if this keeps failing."
+
+    try:
+        resp = requests.post(
+            f"https://ntfy.sh/{NTFY_TOPIC}",
+            data=message.encode("utf-8"),
+            headers={"Title": title, "Priority": "high"},
+            timeout=10,
+        )
+        print(f"ntfy auto-stop notification sent: status={resp.status_code}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"warning: ntfy notification failed: {exc}", file=sys.stderr)
+
+
+async def attempt_auto_stop_async() -> None:
+    """Same schedule-window-closed trick validated in control.py's stop
+    attempt -- confirmed via live testing to actually pause charging.
+    Called every poll while charging and at/above the configured
+    threshold (not just once), so a single failed attempt gets retried
+    on the next poll rather than silently never trying again.
+    """
+    config = BydConfig.from_env()
+    async with BydClient(config) as client:
+        vehicles = await client.get_vehicles()
+        vin = vehicles[0].vin
+        now_local = datetime.now(VEHICLE_TZ)
+        end_time_str = now_local.strftime("%H:%M")
+        start_time_str = now_local.replace(second=0, microsecond=0).strftime("%H:%M")
+        await client.save_charging_schedule(
+            vin,
+            start_charge_time=start_time_str,
+            end_charge_time=end_time_str,
+            charge_way="s",
+            enabled=True,
+        )
 
 
 def notify_charge_started(location_type: str, start_pct: float | None) -> None:
@@ -467,6 +516,24 @@ def main() -> None:
                 rate_confirmed=rate_confirmed,
                 session_id=open_session["id"],
             )
+
+    # Auto-stop: if a limit is configured and the car is currently
+    # charging at or above it, attempt to stop. Checked every poll while
+    # the condition holds (not just once) -- a command that doesn't take
+    # effect immediately (BYD's cloud has a 1-2 min propagation delay,
+    # confirmed during earlier testing) gets retried on the next poll
+    # instead of silently giving up after one attempt.
+    if current_is_charging and state["battery_pct"] is not None:
+        settings = get_tracker_settings()
+        threshold = settings.get("auto_stop_at_pct")
+        if threshold is not None and float(state["battery_pct"]) >= float(threshold):
+            try:
+                asyncio.run(attempt_auto_stop_async())
+                print(f"auto-stop: battery at {state['battery_pct']}% >= limit {threshold}%, stop command sent")
+                notify_auto_stop(True, state["battery_pct"], threshold)
+            except Exception as exc:
+                print(f"auto-stop: command failed: {exc}", file=sys.stderr)
+                notify_auto_stop(False, state["battery_pct"], threshold)
 
 
 if __name__ == "__main__":
