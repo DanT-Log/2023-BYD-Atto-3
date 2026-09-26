@@ -3046,7 +3046,7 @@ async function shareCurrentStatus() {
       const file = new File([blob], 'atto3-status.png', { type: 'image/png' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
-          await navigator.share({ files: [file], title: 'Atto 3 Status' });
+          await navigator.share({ files: [file] });
         } catch (err) {
           if (err.name !== 'AbortError') console.error('share failed', err);
         }
