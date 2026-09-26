@@ -408,7 +408,7 @@ function render(s) {
     <div class="group" id="efficiency-section" style="display:none;">
       <div class="group-header">Efficiency</div>
       <div class="group-card">
-        <div class="row"><span class="k">Energy used (from last charge)</span><span class="v" id="charge-energy-used">—</span></div>
+        <div class="row"><span class="k">Estimated energy used</span><span class="v" id="charge-energy-used">—</span></div>
         <div class="row"><span class="k">Efficiency</span><span class="v" id="charge-efficiency-value">—</span></div>
       </div>
     </div>
@@ -625,35 +625,54 @@ async function loadChargingCurve(s) {
 }
 
 async function loadEfficiencyAndFun(s) {
-  // km_since_last_charge on THIS charge was driven on the energy added by
-  // the PRECEDING charge -- that's the only correct pairing (see the
-  // dashboard's own tracked-efficiency logic). Scoping this to one
-  // charge-to-charge cycle, rather than an arbitrary date range, avoids
-  // the cross-session/day-splitting ambiguity that period-based
-  // aggregates ran into.
+  // Previously this paired THIS charge's km against the PRECEDING
+  // charge's TOTAL energy added -- which only works if the battery was
+  // driven down to near-empty between charges. For anyone who tops up
+  // frequently (normal EV usage, not an edge case), that wildly
+  // overstates consumption: a charge that added 17kWh (~169km of
+  // range) but was followed by an 8km drive before the next top-up
+  // would attribute the WHOLE 17kWh/cost to those 8km, since most of
+  // that energy is still sitting in the battery, unused.
+  //
+  // Fixed to use the car's own reported efficiency instead, which
+  // reflects actual per-km consumption regardless of charging
+  // cadence, plus a blended average rate across all charging history
+  // (rather than one arbitrary preceding session's rate, which has
+  // the same top-up-distortion problem).
   const km = s.km_since_last_charge != null ? Number(s.km_since_last_charge) : null;
   if (km == null || km <= 0) return; // first tracked charge, or no driving recorded before it
 
   try {
-    const prevRows = await sb(`charging_sessions_detailed?started_at=lt.${encodeURIComponent(s.started_at)}&ended_at=not.is.null&select=energy_added_kwh,cost&order=started_at.desc&limit=1`);
-    const prev = prevRows[0];
-    if (!prev || prev.energy_added_kwh == null) return;
+    const [snapRows, allSessions, settingsRows] = await Promise.all([
+      sb(`vehicle_snapshots?car_reported_kwh_per_100km=not.is.null&recorded_at=lte.${encodeURIComponent(s.started_at)}&select=car_reported_kwh_per_100km&order=recorded_at.desc&limit=1`),
+      sb('charging_sessions?ended_at=not.is.null&select=energy_added_kwh,cost'),
+      sb('tracker_settings?select=petrol_price_per_l,petrol_l_per_100km'),
+    ]);
 
-    const kwh = Number(prev.energy_added_kwh);
-    const efficiency = (kwh / km) * 100; // kWh/100km
-    const rate = prev.cost != null && kwh > 0 ? Number(prev.cost) / kwh : null;
+    const carEfficiency = snapRows[0]?.car_reported_kwh_per_100km != null ? Number(snapRows[0].car_reported_kwh_per_100km) : null;
+    if (carEfficiency == null) return; // no reported efficiency available yet to base this on
+
+    let totalKwh = 0, totalCost = 0;
+    allSessions.forEach(sess => {
+      if (sess.energy_added_kwh != null && sess.cost != null) {
+        totalKwh += Number(sess.energy_added_kwh);
+        totalCost += Number(sess.cost);
+      }
+    });
+    const blendedRate = totalKwh > 0 ? totalCost / totalKwh : null;
+
+    const kwhUsed = (km / 100) * carEfficiency;
 
     document.getElementById('efficiency-section').style.display = 'block';
-    document.getElementById('charge-efficiency-value').textContent = `${efficiency.toFixed(1)} kWh/100km`;
-    document.getElementById('charge-energy-used').textContent = fmtKwh(kwh);
+    document.getElementById('charge-efficiency-value').textContent = `${carEfficiency.toFixed(1)} kWh/100km`;
+    document.getElementById('charge-energy-used').textContent = fmtKwh(kwhUsed);
 
-    const settingsRows = await sb('tracker_settings?select=petrol_price_per_l,petrol_l_per_100km');
     const settings = settingsRows[0];
     if (!settings) return;
 
     const litresEquivalent = (km / 100) * settings.petrol_l_per_100km;
     const petrolCost = litresEquivalent * settings.petrol_price_per_l;
-    const electricityCost = rate != null ? (km / 100) * efficiency * rate : null;
+    const electricityCost = blendedRate != null ? kwhUsed * blendedRate : null;
     const co2Kg = litresEquivalent * 2.31;
 
     document.getElementById('fun-section').style.display = 'block';
@@ -662,7 +681,7 @@ async function loadEfficiencyAndFun(s) {
       ${electricityCost != null ? `
         <div class="fun-line" style="margin-top:8px;">You spent about <b>${fmtMoney(electricityCost)}</b> in electricity instead \u2014 roughly <b>${fmtMoney(petrolCost - electricityCost)}</b> saved, and about <b>${co2Kg.toFixed(0)} kg</b> of CO\u2082 avoided.</div>
       ` : ''}
-      <div class="fun-note">Assumes ${settings.petrol_l_per_100km} L/100km at ${fmtMoney(settings.petrol_price_per_l)}/L \u2014 a rough comparison, not precise accounting.</div>
+      <div class="fun-note">Based on the car's own reported efficiency (${carEfficiency.toFixed(1)} kWh/100km) and your average rate across all charging history \u2014 a rough comparison, not precise accounting.</div>
     `;
   } catch (err) {
     console.error('efficiency/fun load failed', err);
