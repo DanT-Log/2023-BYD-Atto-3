@@ -84,6 +84,22 @@
   }
   .hero.home{ background: linear-gradient(150deg, var(--green) 0%, var(--green-2) 55%, #1F8F3E 100%); box-shadow: 0 16px 32px rgba(52,199,89,0.22); }
   .hero.public{ background: linear-gradient(150deg, var(--blue) 0%, #0064D1 55%, #004999 100%); box-shadow: 0 16px 32px rgba(0,122,255,0.22); }
+  .hero-share-btn{
+    position: absolute;
+    top: 18px; right: 18px;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255,255,255,0.18);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 2;
+  }
+  .hero-share-btn svg{ width: 16px; height: 16px; }
+  .hero-share-btn:active{ opacity: 0.6; }
   .hero::after{
     content: "";
     position: absolute;
@@ -318,6 +334,7 @@
     font-size: 15px;
   }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
   <div class="wrap">
@@ -368,6 +385,9 @@ function render(s) {
 
   document.getElementById('content').innerHTML = `
     <div class="hero ${isHome ? 'home' : 'public'}">
+      <button class="hero-share-btn" id="session-share-btn" aria-label="Share">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6 12 2 8 6"/><path d="M12 2v14"/></svg>
+      </button>
       <div class="hero-place">${placeLabel}</div>
       <div class="hero-cost">${fmtMoney(s.cost)}</div>
       <div class="hero-pct">${pctDelta != null ? `${s.start_pct}% → ${s.end_pct}% (+${pctDelta}%)` : ''}</div>
@@ -461,6 +481,8 @@ function render(s) {
       </div>
     </div>
   `;
+
+  document.getElementById('session-share-btn').addEventListener('click', () => shareSession(s, placeLabel));
 }
 
 const PASSKEY_STORAGE_KEY = 'atto3_passkey';
@@ -753,6 +775,72 @@ load();
     lastDist = 0;
   });
 })();
+</script>
+
+<div id="session-share-card" style="position:fixed; left:-9999px; top:0; width:360px; padding:28px 24px; background:linear-gradient(160deg, #1C1C1E 0%, #2C2C2E 100%); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color:#fff; border-radius:20px;">
+  <div style="display:flex; align-items:center; margin-bottom:20px;">
+    <svg viewBox="0 0 24 24" fill="#34C759" style="width:22px; height:22px;"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
+  </div>
+  <div id="ssc-title" style="font-size:24px; font-weight:700; margin-bottom:4px;"></div>
+  <div id="ssc-sub" style="font-size:14px; opacity:0.6; margin-bottom:22px;"></div>
+  <div id="ssc-stats" style="display:grid; grid-template-columns:1fr 1fr; gap:16px;"></div>
+  <div style="margin-top:22px; padding-top:16px; border-top:1px solid rgba(255,255,255,0.12); font-size:11px; opacity:0.4;" id="ssc-footer"></div>
+</div>
+
+<script>
+async function shareSession(s, placeLabel) {
+  const card = document.getElementById('session-share-card');
+  const titleEl = document.getElementById('ssc-title');
+  const subEl = document.getElementById('ssc-sub');
+  const statsEl = document.getElementById('ssc-stats');
+  const footerEl = document.getElementById('ssc-footer');
+
+  function statBlock(label, value) {
+    return `<div><div style="font-size:11px; opacity:0.55; margin-bottom:2px;">${label}</div><div style="font-size:19px; font-weight:600;">${value}</div></div>`;
+  }
+
+  const pctDelta = (s.start_pct != null && s.end_pct != null) ? s.end_pct - s.start_pct : null;
+  titleEl.textContent = fmtMoney(s.cost);
+  subEl.textContent = `${placeLabel}${pctDelta != null ? ` \u00b7 ${s.start_pct}% \u2192 ${s.end_pct}%` : ''}`;
+
+  const peakKw = document.getElementById('peak-kw')?.textContent;
+  const avgKw = document.getElementById('avg-kw')?.textContent;
+
+  const blocks = [
+    statBlock('Duration', fmtDuration(s.started_at, s.ended_at)),
+    statBlock('Energy added', fmtKwh(s.energy_added_kwh)),
+  ];
+  if (peakKw && peakKw !== '\u2014') blocks.push(statBlock('Peak power', peakKw));
+  if (avgKw && avgKw !== '\u2014') blocks.push(statBlock('Average power', avgKw));
+  if (s.range_added_km != null) blocks.push(statBlock('Range added', `+${Number(s.range_added_km).toFixed(0)} km`));
+  statsEl.innerHTML = blocks.join('');
+
+  footerEl.textContent = fmtDate(s.started_at);
+
+  try {
+    const canvas = await html2canvas(card, { backgroundColor: null, scale: 2 });
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const file = new File([blob], 'atto3-charge.png', { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file] });
+        } catch (err) {
+          if (err.name !== 'AbortError') console.error('share failed', err);
+        }
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'atto3-charge.png';
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    }, 'image/png');
+  } catch (err) {
+    console.error('share image generation failed', err);
+  }
+}
 </script>
 </body>
 </html>
