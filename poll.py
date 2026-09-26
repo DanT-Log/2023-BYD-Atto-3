@@ -183,17 +183,17 @@ NTFY_TOPIC = os.environ.get("NTFY_TOPIC")
 VEHICLE_TZ = ZoneInfo("Australia/Sydney")
 
 
-def notify_auto_stop(success: bool, pct: float, threshold: int) -> None:
+def notify_auto_stop(success: bool, pct: float, reason: str) -> None:
     if not NTFY_TOPIC:
         print("notify skipped: NTFY_TOPIC is not set", file=sys.stderr)
         return
 
     if success:
         title = "BYD Atto 3 \u2014 auto-stop sent"
-        message = f"Battery reached {pct}% (limit: {threshold}%) \u2014 stop command sent. Will retry next poll if it doesn't take effect."
+        message = f"Battery at {pct}% \u2014 {reason}, stop command sent. Will retry next poll if it doesn't take effect."
     else:
         title = "BYD Atto 3 \u2014 auto-stop FAILED"
-        message = f"Battery is at {pct}% (limit: {threshold}%) but the stop command errored. Will retry next poll \u2014 check manually if this keeps failing."
+        message = f"Battery at {pct}% \u2014 {reason}, but the stop command errored. Will retry next poll \u2014 check manually if this keeps failing."
 
     try:
         resp = requests.post(
@@ -207,17 +207,17 @@ def notify_auto_stop(success: bool, pct: float, threshold: int) -> None:
         print(f"warning: ntfy notification failed: {exc}", file=sys.stderr)
 
 
-def notify_night_topup(success: bool, pct: float, threshold: int) -> None:
+def notify_auto_start(success: bool, pct: float, reason: str) -> None:
     if not NTFY_TOPIC:
         print("notify skipped: NTFY_TOPIC is not set", file=sys.stderr)
         return
 
     if success:
-        title = "BYD Atto 3 \u2014 night top-up started"
-        message = f"Battery at {pct}% (under your {threshold}% limit) during the overnight window \u2014 start command sent."
+        title = "BYD Atto 3 \u2014 auto-start sent"
+        message = f"Battery at {pct}% \u2014 {reason}, start command sent."
     else:
-        title = "BYD Atto 3 \u2014 night top-up FAILED"
-        message = f"Battery at {pct}%, tried to start overnight top-up but the command errored. Will retry next poll."
+        title = "BYD Atto 3 \u2014 auto-start FAILED"
+        message = f"Battery at {pct}% \u2014 {reason}, but the start command errored. Will retry next poll."
 
     try:
         resp = requests.post(
@@ -226,7 +226,7 @@ def notify_night_topup(success: bool, pct: float, threshold: int) -> None:
             headers={"Title": title, "Priority": "default"},
             timeout=10,
         )
-        print(f"ntfy night-topup notification sent: status={resp.status_code}")
+        print(f"ntfy auto-start notification sent: status={resp.status_code}")
     except Exception as exc:  # noqa: BLE001
         print(f"warning: ntfy notification failed: {exc}", file=sys.stderr)
 
@@ -254,21 +254,33 @@ async def attempt_auto_stop_async() -> None:
         )
 
 
-NIGHT_TOPUP_WINDOW_START_HOUR = 0  # 12am
-NIGHT_TOPUP_WINDOW_END_HOUR = 6    # 6am, exclusive
-
-
-async def attempt_night_topup_async() -> None:
+async def attempt_auto_start_async() -> None:
     """Officially documented start_charging() call, confirmed working
     during earlier live testing (same command control.py's Start
-    Charging button uses). Only called from within the configured
-    overnight window when the car is plugged in but not charging and
-    still under the configured limit -- see the call site in main()."""
+    Charging button uses)."""
     config = BydConfig.from_env()
     async with BydClient(config) as client:
         vehicles = await client.get_vehicles()
         vin = vehicles[0].vin
         await client.start_charging(vin)
+
+
+def time_in_window(now_local, start_str: str, end_str: str) -> bool:
+    """Handles a window that wraps past midnight (e.g. 22:00-06:00),
+    not just start<end same-day windows."""
+    try:
+        sh, sm = map(int, start_str.split(":"))
+        eh, em = map(int, end_str.split(":"))
+    except (ValueError, AttributeError):
+        return False
+    start_min = sh * 60 + sm
+    end_min = eh * 60 + em
+    now_min = now_local.hour * 60 + now_local.minute
+    if start_min == end_min:
+        return True  # zero-width window treated as always-on
+    if start_min < end_min:
+        return start_min <= now_min < end_min
+    return now_min >= start_min or now_min < end_min
 
 
 def notify_charge_started(location_type: str, start_pct: float | None) -> None:
@@ -606,41 +618,68 @@ def main() -> None:
     # effect immediately (BYD's cloud has a 1-2 min propagation delay,
     # confirmed during earlier testing) gets retried on the next poll
     # instead of silently giving up after one attempt.
-    if current_is_charging and state["battery_pct"] is not None:
+    # Charge automation: two independent toggles.
+    #   pct_limit_enabled:  maintain battery <= auto_stop_at_pct, ANY time
+    #                       (stops at the limit, auto-starts anytime it
+    #                       drops back under, if plugged in)
+    #   time_window_enabled: confine charging to window_start_time -
+    #                       window_end_time, up to 100% (no % cap of its
+    #                       own) -- starts entering the window, stops
+    #                       leaving it
+    #   Both on: stop if (over % OR outside window), start if (inside
+    #       window AND under %)
+    #   Neither on: no automation -- charges freely, as before this
+    #       feature existed
+    if state["battery_pct"] is not None:
         settings = get_tracker_settings()
-        threshold = settings.get("auto_stop_at_pct")
-        if threshold is not None and float(state["battery_pct"]) >= float(threshold):
-            try:
-                asyncio.run(attempt_auto_stop_async())
-                print(f"auto-stop: battery at {state['battery_pct']}% >= limit {threshold}%, stop command sent")
-                notify_auto_stop(True, state["battery_pct"], threshold)
-            except Exception as exc:
-                print(f"auto-stop: command failed: {exc}", file=sys.stderr)
-                notify_auto_stop(False, state["battery_pct"], threshold)
+        pct_enabled = bool(settings.get("pct_limit_enabled"))
+        time_enabled = bool(settings.get("time_window_enabled"))
 
-    # Night top-up: if enabled, and it's currently within the overnight
-    # window, and the car is plugged in but not already charging, and
-    # still under the configured limit, send a start command. Checked
-    # every poll the condition holds, same retry-on-failure reasoning as
-    # auto-stop above. Deliberately does NOT fire outside the window
-    # (the whole point is confining charging to the cheap rate period)
-    # or once already at/above the limit (this is a top-up, not a
-    # full recharge to 100%).
-    if not current_is_charging and state["battery_pct"] is not None:
-        settings = get_tracker_settings()
-        if settings.get("night_topup_enabled"):
-            now_local = datetime.now(VEHICLE_TZ)
-            in_window = NIGHT_TOPUP_WINDOW_START_HOUR <= now_local.hour < NIGHT_TOPUP_WINDOW_END_HOUR
+        if pct_enabled or time_enabled:
             threshold = settings.get("auto_stop_at_pct")
+            battery_pct = float(state["battery_pct"])
+            now_local = datetime.now(VEHICLE_TZ)
+            in_window = time_enabled and time_in_window(
+                now_local,
+                settings.get("window_start_time") or "00:00",
+                settings.get("window_end_time") or "06:00",
+            )
             is_plugged_in = state.get("connect_state") not in (None, 0, "0")
-            if in_window and is_plugged_in and threshold is not None and float(state["battery_pct"]) < float(threshold):
+
+            over_limit = pct_enabled and threshold is not None and battery_pct >= float(threshold)
+            outside_window = time_enabled and not in_window
+            under_limit = (not pct_enabled) or (threshold is not None and battery_pct < float(threshold))
+            should_charge_now = (not time_enabled or in_window) and under_limit
+
+            if current_is_charging and (over_limit or outside_window):
+                reasons = []
+                if over_limit:
+                    reasons.append(f"battery {battery_pct}% >= {threshold}% limit")
+                if outside_window:
+                    reasons.append("outside the configured time window")
+                reason = " and ".join(reasons)
                 try:
-                    asyncio.run(attempt_night_topup_async())
-                    print(f"night top-up: battery at {state['battery_pct']}% < limit {threshold}%, start command sent")
-                    notify_night_topup(True, state["battery_pct"], threshold)
+                    asyncio.run(attempt_auto_stop_async())
+                    print(f"auto-stop: {reason}, stop command sent")
+                    notify_auto_stop(True, battery_pct, reason)
                 except Exception as exc:
-                    print(f"night top-up: command failed: {exc}", file=sys.stderr)
-                    notify_night_topup(False, state["battery_pct"], threshold)
+                    print(f"auto-stop: command failed: {exc}", file=sys.stderr)
+                    notify_auto_stop(False, battery_pct, reason)
+
+            elif not current_is_charging and is_plugged_in and should_charge_now:
+                if pct_enabled and time_enabled:
+                    reason = f"under {threshold}% and inside the configured time window"
+                elif pct_enabled:
+                    reason = f"under {threshold}% limit"
+                else:
+                    reason = "inside the configured time window"
+                try:
+                    asyncio.run(attempt_auto_start_async())
+                    print(f"auto-start: {reason}, start command sent")
+                    notify_auto_start(True, battery_pct, reason)
+                except Exception as exc:
+                    print(f"auto-start: command failed: {exc}", file=sys.stderr)
+                    notify_auto_start(False, battery_pct, reason)
 
 
 if __name__ == "__main__":

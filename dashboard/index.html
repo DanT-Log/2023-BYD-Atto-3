@@ -1070,13 +1070,15 @@
           </div>
         </div>
         <div class="group">
-          <div class="group-header" data-i18n="auto_stop_header">Auto-Stop Charging</div>
+          <div class="group-header" data-i18n="auto_stop_header">Charge Automation</div>
           <div class="group-card">
-            <div class="settings-row"><label data-i18n="auto_stop_pct">Stop at % (blank = off)</label><input type="number" step="1" min="20" max="100" id="s-auto-stop-pct" placeholder="off"></div>
-            <div class="settings-row"><label data-i18n="night_topup_label">Auto-charge overnight (12am-6am) to reach limit</label><input type="checkbox" id="s-night-topup" style="width:22px;height:22px;"></div>
+            <div class="settings-row"><label data-i18n="pct_limit_toggle">Limit charge to a %</label><input type="checkbox" id="s-pct-limit-enabled" style="width:22px;height:22px;"></div>
+            <div class="settings-row"><label data-i18n="auto_stop_pct">Target %</label><input type="number" step="1" min="20" max="100" id="s-auto-stop-pct" placeholder="e.g. 80"></div>
+            <div class="settings-row"><label data-i18n="time_window_toggle">Only charge during set times</label><input type="checkbox" id="s-time-window-enabled" style="width:22px;height:22px;"></div>
+            <div class="settings-row"><label data-i18n="window_start_label">Window start</label><input type="time" id="s-window-start"></div>
+            <div class="settings-row"><label data-i18n="window_end_label">Window end</label><input type="time" id="s-window-end"></div>
           </div>
-          <div class="settings-note" id="auto-stop-note" data-i18n="auto_stop_note">Experimental: retries every poll until the car actually stops. Not guaranteed to work every time -- always double-check.</div>
-          <div class="settings-note" data-i18n="night_topup_note">If enabled, and the car is plugged in but under the % above during 12am-6am, sends a start command automatically -- for confining charging to a cheap overnight rate window. Only starts, never overrides the stop limit.</div>
+          <div class="settings-note" data-i18n="auto_stop_note">Experimental \u2014 retries every poll until the car responds, not guaranteed every time. Neither ticked: charges freely to 100%, any time. % only: maintains the target any time (starts and stops as needed). Time only: charges up to 100%, confined to the window. Both: stops at the target OR outside the window, starts only inside the window and under the target.</div>
         </div>
         <div class="group">
           <div class="group-header" data-i18n="petrol_header">Petrol Comparison</div>
@@ -1168,10 +1170,10 @@ const TRANSLATIONS = {
     vehicle_header: "Vehicle", battery_capacity: "Battery capacity (kWh)",
     home_detection_header: "Home Detection", home_radius: "Home radius (metres)",
     polling_header: "Polling", poll_interval: "Poll interval (minutes)",
-    auto_stop_header: "Auto-Stop Charging", auto_stop_pct: "Stop at % (blank = off)",
-    night_topup_label: "Auto-charge overnight (12am-6am) to reach limit",
-    night_topup_note: "If enabled, and the car is plugged in but under the % above during 12am-6am, sends a start command automatically \u2014 for confining charging to a cheap overnight rate window. Only starts, never overrides the stop limit.",
-    auto_stop_note: "Experimental: retries every poll until the car actually stops. Not guaranteed to work every time \u2014 always double-check.",
+    auto_stop_header: "Charge Automation", auto_stop_pct: "Target %",
+    pct_limit_toggle: "Limit charge to a %", time_window_toggle: "Only charge during set times",
+    window_start_label: "Window start", window_end_label: "Window end",
+    auto_stop_note: "Experimental \u2014 retries every poll until the car responds, not guaranteed every time. Neither ticked: charges freely to 100%, any time. % only: maintains the target any time (starts and stops as needed). Time only: charges up to 100%, confined to the window. Both: stops at the target OR outside the window, starts only inside the window and under the target.",
     petrol_header: "Petrol Comparison", petrol_price: "Petrol price ($/L)", petrol_consumption: "Petrol consumption (L/100km)",
     save_settings: "Save Settings", saved: "Saved.", save_failed: "Failed to save \u2014 try again.",
     invalid_numbers: "All fields must be valid, non-negative numbers.",
@@ -1276,10 +1278,10 @@ const TRANSLATIONS = {
     vehicle_header: "Xe", battery_capacity: "Dung l\u01b0\u1ee3ng pin (kWh)",
     home_detection_header: "Nh\u1eadn di\u1ec7n v\u1ecb tr\u00ed nh\u00e0", home_radius: "B\u00e1n k\u00ednh nh\u00e0 (m\u00e9t)",
     polling_header: "T\u1ea7n su\u1ea5t ki\u1ec3m tra", poll_interval: "T\u1ea7n su\u1ea5t ki\u1ec3m tra (ph\u00fat)",
-    auto_stop_header: "T\u1ef1 \u0111\u1ed9ng d\u1eebng s\u1ea1c", auto_stop_pct: "D\u1eebng \u1edf % (\u0111\u1ec3 tr\u1ed1ng = t\u1eaft)",
-    night_topup_label: "T\u1ef1 \u0111\u1ed9ng s\u1ea1c qua \u0111\u00eam (0h-6h) \u0111\u1ec3 \u0111\u1ea1t gi\u1edbi h\u1ea1n",
-    night_topup_note: "N\u1ebfu b\u1eadt, v\u00e0 xe \u0111ang c\u1eafm s\u1ea1c nh\u01b0ng d\u01b0\u1edbi % \u1edf tr\u00ean trong kho\u1ea3ng 0h-6h, s\u1ebd t\u1ef1 \u0111\u1ed9ng g\u1eedi l\u1ec7nh b\u1eaft \u0111\u1ea7u \u2014 \u0111\u1ec3 gi\u1edbi h\u1ea1n s\u1ea1c trong khung gi\u1edd r\u1ebb qua \u0111\u00eam. Ch\u1ec9 b\u1eaft \u0111\u1ea7u, kh\u00f4ng bao gi\u1edd v\u01b0\u1ee3t qua gi\u1edbi h\u1ea1n d\u1eebng.",
-    auto_stop_note: "Th\u1eed nghi\u1ec7m: th\u1eed l\u1ea1i m\u1ed7i l\u1ea7n ki\u1ec3m tra cho \u0111\u1ebfn khi xe th\u1ef1c s\u1ef1 d\u1eebng. Kh\u00f4ng \u0111\u1ea3m b\u1ea3o ho\u1ea1t \u0111\u1ed9ng m\u1ecdi l\u1ea7n \u2014 lu\u00f4n ki\u1ec3m tra l\u1ea1i.",
+    auto_stop_header: "T\u1ef1 \u0111\u1ed9ng s\u1ea1c", auto_stop_pct: "% m\u1ee5c ti\u00eau",
+    pct_limit_toggle: "Gi\u1edbi h\u1ea1n s\u1ea1c theo %", time_window_toggle: "Ch\u1ec9 s\u1ea1c trong khung gi\u1edd \u0111\u00e3 \u0111\u1eb7t",
+    window_start_label: "B\u1eaft \u0111\u1ea7u", window_end_label: "K\u1ebft th\u00fac",
+    auto_stop_note: "Th\u1eed nghi\u1ec7m \u2014 th\u1eed l\u1ea1i m\u1ed7i l\u1ea7n ki\u1ec3m tra, kh\u00f4ng \u0111\u1ea3m b\u1ea3o m\u1ecdi l\u1ea7n. Kh\u00f4ng b\u1eadt c\u00e1i n\u00e0o: s\u1ea1c t\u1ef1 do \u0111\u1ebfn 100%. Ch\u1ec9 b\u1eadt %: gi\u1eef m\u1ee9c % b\u1ea5t k\u1ef3 l\u00fac n\u00e0o. Ch\u1ec9 b\u1eadt gi\u1edd: s\u1ea1c \u0111\u1ebfn 100% trong khung gi\u1edd. C\u1ea3 hai: d\u1eebng khi qua % ho\u1eb7c ngo\u00e0i khung gi\u1edd, ch\u1ec9 b\u1eaft \u0111\u1ea7u trong khung gi\u1edd v\u00e0 d\u01b0\u1edbi %.",
     petrol_header: "So s\u00e1nh v\u1edbi x\u0103ng", petrol_price: "Gi\u00e1 x\u0103ng ($/L)", petrol_consumption: "M\u1ee9c ti\u00eau th\u1ee5 x\u0103ng (L/100km)",
     save_settings: "L\u01b0u c\u00e0i \u0111\u1eb7t", saved: "\u0110\u00e3 l\u01b0u.", save_failed: "L\u01b0u th\u1ea5t b\u1ea1i \u2014 th\u1eed l\u1ea1i.",
     invalid_numbers: "T\u1ea5t c\u1ea3 c\u00e1c tr\u01b0\u1eddng ph\u1ea3i l\u00e0 s\u1ed1 h\u1ee3p l\u1ec7, kh\u00f4ng \u00e2m.",
@@ -2631,7 +2633,10 @@ async function populateSettingsForm() {
   document.getElementById('s-home-radius').value = s.home_radius_m ?? '';
   document.getElementById('s-poll-interval').value = s.poll_interval_minutes ?? '';
   document.getElementById('s-auto-stop-pct').value = s.auto_stop_at_pct ?? '';
-  document.getElementById('s-night-topup').checked = !!s.night_topup_enabled;
+  document.getElementById('s-pct-limit-enabled').checked = !!s.pct_limit_enabled;
+  document.getElementById('s-time-window-enabled').checked = !!s.time_window_enabled;
+  document.getElementById('s-window-start').value = s.window_start_time ?? '00:00';
+  document.getElementById('s-window-end').value = s.window_end_time ?? '06:00';
   document.getElementById('s-petrol-price').value = s.petrol_price_per_l ?? '';
   document.getElementById('s-petrol-consumption').value = s.petrol_l_per_100km ?? '';
 }
@@ -2697,20 +2702,30 @@ document.getElementById('settings-save-btn').addEventListener('click', async () 
     return;
   }
 
-  // Nullable and validated separately from the required fields above --
-  // blank means "turn auto-stop off", not an invalid number.
+  // The % field is required when the "Limit charge to a %" toggle is
+  // checked -- otherwise the toggle would be on with nothing to act on.
+  const pctLimitEnabled = document.getElementById('s-pct-limit-enabled').checked;
+  const timeWindowEnabled = document.getElementById('s-time-window-enabled').checked;
   const autoStopRaw = document.getElementById('s-auto-stop-pct').value;
-  let autoStopValue = null;
-  if (autoStopRaw !== '') {
-    autoStopValue = parseFloat(autoStopRaw);
-    if (isNaN(autoStopValue) || autoStopValue < 20 || autoStopValue > 100) {
-      status.textContent = 'Auto-stop % must be between 20 and 100, or blank to turn off.';
-      status.classList.add('error');
-      return;
-    }
+  let autoStopValue = autoStopRaw !== '' ? parseFloat(autoStopRaw) : null;
+  if (pctLimitEnabled && (autoStopValue == null || isNaN(autoStopValue) || autoStopValue < 20 || autoStopValue > 100)) {
+    status.textContent = 'Enter a target % between 20 and 100, or untick "Limit charge to a %".';
+    status.classList.add('error');
+    return;
   }
+  if (autoStopValue != null && (isNaN(autoStopValue) || autoStopValue < 20 || autoStopValue > 100)) {
+    status.textContent = 'Target % must be between 20 and 100.';
+    status.classList.add('error');
+    return;
+  }
+  const windowStart = document.getElementById('s-window-start').value || '00:00';
+  const windowEnd = document.getElementById('s-window-end').value || '06:00';
+
   payload.auto_stop_at_pct = autoStopValue;
-  payload.night_topup_enabled = document.getElementById('s-night-topup').checked;
+  payload.pct_limit_enabled = pctLimitEnabled;
+  payload.time_window_enabled = timeWindowEnabled;
+  payload.window_start_time = windowStart;
+  payload.window_end_time = windowEnd;
 
   let passkey = await getPasskey();
   if (!passkey) { status.textContent = ''; return; }
