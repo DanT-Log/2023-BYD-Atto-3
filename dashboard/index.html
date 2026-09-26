@@ -886,6 +886,8 @@
         <div class="group-card" id="vehicle-card">
           <div class="row"><span class="k">Odometer</span><span class="v" id="vehicle-odometer">—</span></div>
           <div class="row"><span class="k">Doors &amp; Windows</span><span class="v" id="vehicle-security">—</span></div>
+          <div class="row"><span class="k">Plugged in</span><span class="v" id="vehicle-plugged-in">—</span></div>
+          <div class="row" id="vehicle-charge-window-row" style="display:none;"><span class="k">Charging window</span><span class="v" id="vehicle-charge-window">—</span></div>
         </div>
       </div>
 
@@ -1207,6 +1209,7 @@ const TRANSLATIONS = {
     started: "Started", charging_speed: "Charging speed", elapsed: "Elapsed",
     energy_so_far: "Energy so far", cost_so_far: "Cost so far",
     estimated_full_by: "Estimated full by", time_remaining: "Time remaining",
+    charge_limit: "Charge limit", time_to_limit: "Time to limit",
     any_moment: "Any moment",
     insight_week_up: "You're up {pct}% vs last week ({a} vs {b}).",
     insight_week_down: "You're down {pct}% vs last week ({a} vs {b}).",
@@ -1315,6 +1318,7 @@ const TRANSLATIONS = {
     started: "B\u1eaft \u0111\u1ea7u", charging_speed: "T\u1ed1c \u0111\u1ed9 s\u1ea1c", elapsed: "Th\u1eddi gian tr\u00f4i qua",
     energy_so_far: "N\u0103ng l\u01b0\u1ee3ng \u0111\u00e3 n\u1ea1p", cost_so_far: "Chi ph\u00ed hi\u1ec7n t\u1ea1i",
     estimated_full_by: "D\u1ef1 ki\u1ebfn \u0111\u1ea7y l\u00fac", time_remaining: "Th\u1eddi gian c\u00f2n l\u1ea1i",
+    charge_limit: "Gi\u1edbi h\u1ea1n s\u1ea1c", time_to_limit: "Th\u1eddi gian \u0111\u1ebfn gi\u1edbi h\u1ea1n",
     any_moment: "S\u1eafp xong",
     insight_week_up: "B\u1ea1n t\u0103ng {pct}% so v\u1edbi tu\u1ea7n tr\u01b0\u1edbc ({a} so v\u1edbi {b}).",
     insight_week_down: "B\u1ea1n gi\u1ea3m {pct}% so v\u1edbi tu\u1ea7n tr\u01b0\u1edbc ({a} so v\u1edbi {b}).",
@@ -1541,7 +1545,7 @@ function fmtRemaining(target) {
   return h === 0 ? t('duration_min', { m }) : t('duration_hm', { h, m });
 }
 
-function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, batteryPct, lastUpdated, currentPowerKw) {
+function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, batteryPct, lastUpdated, currentPowerKw, pctLimit, limitTarget) {
   const card = document.getElementById('status-card');
   card.classList.add('charging');
   const isHome = session.location_type === 'home';
@@ -1562,6 +1566,10 @@ function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, batte
     <div class="status-stat"><div class="k">${t('elapsed')}</div><div class="v">${fmtElapsed(session.started_at)}</div></div>
     <div class="status-stat"><div class="k">${t('energy_so_far')}</div><div class="v">${fmtKwh(energyKwh)}</div></div>
     <div class="status-stat"><div class="k">${t('cost_so_far')}</div><div class="v">${fmtMoney(costSoFar)}</div></div>
+    ${pctLimit != null ? `
+      <div class="status-stat"><div class="k">${t('charge_limit')}</div><div class="v">${pctLimit}%</div></div>
+      <div class="status-stat"><div class="k">${t('time_to_limit')}</div><div class="v">${limitTarget ? fmtRemaining(limitTarget) : '—'}</div></div>
+    ` : ''}
     ${fullByTarget ? `
       <div class="status-stat"><div class="k">${t('estimated_full_by')}</div><div class="v">${fmtFullByDate(fullByTarget)}</div></div>
       <div class="status-stat"><div class="k">${t('time_remaining')}</div><div class="v">${fmtRemaining(fullByTarget)}</div></div>
@@ -1629,7 +1637,21 @@ async function loadLiveStatus() {
       const latestPct = [...snapshots].reverse().find(s => s.battery_pct != null)?.battery_pct;
       const lastUpdated = snapshots.length ? snapshots[snapshots.length - 1].recorded_at : null;
       const currentPowerKw = [...snapshots].reverse().find(s => s.charging_power_kw != null)?.charging_power_kw;
-      renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, latestPct, lastUpdated, currentPowerKw != null ? Number(currentPowerKw) : null);
+
+      // Time until reaching the configured auto-stop %, using the
+      // current charging rate -- distinct from fullByTarget above,
+      // which is the CAR's own countdown toward its own limit (still
+      // 100%, since we can't set the car's native limit remotely).
+      let limitTarget = null;
+      const pctLimit = settings.pct_limit_enabled ? Number(settings.auto_stop_at_pct) : null;
+      if (pctLimit != null && currentPowerKw != null && settings.battery_capacity_kwh && latestPct != null && latestPct < pctLimit) {
+        const pctPerHour = (Number(currentPowerKw) / Number(settings.battery_capacity_kwh)) * 100;
+        if (pctPerHour > 0) {
+          limitTarget = new Date(Date.now() + ((pctLimit - latestPct) / pctPerHour) * 3600000);
+        }
+      }
+
+      renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, latestPct, lastUpdated, currentPowerKw != null ? Number(currentPowerKw) : null, pctLimit, limitTarget);
     } else {
       const latest = await sb('vehicle_snapshots?select=battery_pct,range_km,recorded_at&order=recorded_at.desc&limit=1');
       renderIdleStatus(latest[0] || null);
@@ -2198,8 +2220,34 @@ async function loadCarEfficiency() {
 // fields whose exact meaning wasn't fully certain from samples alone.
 async function renderVehicleInfo() {
   try {
-    const rows = await sb('vehicle_snapshots?select=raw&order=recorded_at.desc&limit=1');
+    const [rows, settingsRows] = await Promise.all([
+      sb('vehicle_snapshots?select=raw&order=recorded_at.desc&limit=1'),
+      sb('tracker_settings?select=time_window_enabled,window_start_time,window_end_time'),
+    ]);
     const rt = rows[0]?.raw?.realtime;
+    const chargingRaw = rows[0]?.raw?.charging;
+    const settings = settingsRows[0] || {};
+
+    // connectState: 0 = not plugged in, nonzero = plugged in. Same raw
+    // blob and camelCase convention as chargePower/door-lock fields
+    // elsewhere -- not independently verified the way the door locks
+    // were empirically confirmed, so treat as a best-effort indicator.
+    const connectState = chargingRaw?.connect_state;
+    const pluggedInEl = document.getElementById('vehicle-plugged-in');
+    if (connectState == null) {
+      pluggedInEl.textContent = '—';
+    } else {
+      pluggedInEl.textContent = Number(connectState) !== 0 ? 'Yes' : 'No';
+    }
+
+    const windowRow = document.getElementById('vehicle-charge-window-row');
+    if (settings.time_window_enabled) {
+      windowRow.style.display = '';
+      document.getElementById('vehicle-charge-window').textContent = `${settings.window_start_time} \u2013 ${settings.window_end_time}`;
+    } else {
+      windowRow.style.display = 'none';
+    }
+
     if (!rt) return;
 
     const odometer = rt.total_mileage;
@@ -2624,9 +2672,12 @@ async function lockApp() {
   await load();
 }
 
+let lastLoadedSettings = {};
+
 async function populateSettingsForm() {
   const rows = await sb('tracker_settings?select=*');
   const s = rows[0] || {};
+  lastLoadedSettings = { ...s };
   document.getElementById('s-home-rate').value = s.home_rate_per_kwh ?? '';
   document.getElementById('s-public-rate').value = s.public_rate_per_kwh ?? '';
   document.getElementById('s-battery-capacity').value = s.battery_capacity_kwh ?? '';
@@ -2639,6 +2690,41 @@ async function populateSettingsForm() {
   document.getElementById('s-window-end').value = s.window_end_time ?? '06:00';
   document.getElementById('s-petrol-price').value = s.petrol_price_per_l ?? '';
   document.getElementById('s-petrol-consumption').value = s.petrol_l_per_100km ?? '';
+}
+
+const SETTINGS_LABELS = {
+  home_rate_per_kwh: 'Home rate',
+  public_rate_per_kwh: 'Public rate',
+  battery_capacity_kwh: 'Battery capacity',
+  home_radius_m: 'Home radius',
+  poll_interval_minutes: 'Poll interval',
+  petrol_price_per_l: 'Petrol price',
+  petrol_l_per_100km: 'Petrol consumption',
+  auto_stop_at_pct: 'Target %',
+  pct_limit_enabled: 'Limit charge to %',
+  time_window_enabled: 'Charge time window',
+  window_start_time: 'Window start',
+  window_end_time: 'Window end',
+};
+
+function buildSettingsDiff(oldSettings, newPayload) {
+  const fmt = (v) => {
+    if (v === null || v === undefined) return 'off';
+    if (typeof v === 'boolean') return v ? 'on' : 'off';
+    return v;
+  };
+  const changes = [];
+  for (const [key, label] of Object.entries(SETTINGS_LABELS)) {
+    if (!(key in newPayload)) continue;
+    const oldRaw = oldSettings[key] ?? null;
+    const newRaw = newPayload[key] ?? null;
+    const oldNorm = typeof oldRaw === 'boolean' || oldRaw === null ? oldRaw : (isNaN(Number(oldRaw)) ? oldRaw : Number(oldRaw));
+    const newNorm = typeof newRaw === 'boolean' || newRaw === null ? newRaw : (isNaN(Number(newRaw)) ? newRaw : Number(newRaw));
+    if (oldNorm !== newNorm) {
+      changes.push(`${label}: ${fmt(oldNorm)} \u2192 ${fmt(newNorm)}`);
+    }
+  }
+  return changes;
 }
 
 document.getElementById('settings-unlock-btn').addEventListener('click', unlockApp);
@@ -2747,8 +2833,10 @@ document.getElementById('settings-save-btn').addEventListener('click', async () 
       });
     }
     if (!res.ok) throw new Error('save failed');
-    status.textContent = t('saved');
-    setTimeout(() => { status.textContent = ''; }, 4000);
+    const changes = buildSettingsDiff(lastLoadedSettings, payload);
+    lastLoadedSettings = { ...lastLoadedSettings, ...payload };
+    status.textContent = changes.length ? `Saved \u2014 ${changes.join(', ')}` : t('saved') + ' (no changes)';
+    setTimeout(() => { status.textContent = ''; }, 6000);
   } catch (err) {
     status.textContent = t('save_failed');
     status.classList.add('error');
