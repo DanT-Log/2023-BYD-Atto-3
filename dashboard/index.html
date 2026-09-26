@@ -559,11 +559,22 @@
     margin-left: 17px;
   }
   .status-grid{
+    margin-top: 12px;
+  }
+  .status-subgrid{
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px 12px;
-    margin-top: 12px;
   }
+  .status-section-label{
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin: 16px 0 8px;
+  }
+  .status-section-label:first-child{ margin-top: 0; }
   .status-stat .k{ font-size: 12px; color: var(--text-secondary); }
   .status-stat .v{
     font-size: 17px;
@@ -1209,7 +1220,7 @@ const TRANSLATIONS = {
     started: "Started", charging_speed: "Charging speed", elapsed: "Elapsed",
     energy_so_far: "Energy so far", cost_so_far: "Cost so far",
     estimated_full_by: "Estimated full by", time_remaining: "Time remaining",
-    charge_limit: "Charge limit", time_to_limit: "Time to limit",
+    charge_limit: "Charge limit", time_to_limit: "Time to limit", estimated_limit_by: "Estimated limit by",
     any_moment: "Any moment",
     insight_week_up: "You're up {pct}% vs last week ({a} vs {b}).",
     insight_week_down: "You're down {pct}% vs last week ({a} vs {b}).",
@@ -1318,7 +1329,7 @@ const TRANSLATIONS = {
     started: "B\u1eaft \u0111\u1ea7u", charging_speed: "T\u1ed1c \u0111\u1ed9 s\u1ea1c", elapsed: "Th\u1eddi gian tr\u00f4i qua",
     energy_so_far: "N\u0103ng l\u01b0\u1ee3ng \u0111\u00e3 n\u1ea1p", cost_so_far: "Chi ph\u00ed hi\u1ec7n t\u1ea1i",
     estimated_full_by: "D\u1ef1 ki\u1ebfn \u0111\u1ea7y l\u00fac", time_remaining: "Th\u1eddi gian c\u00f2n l\u1ea1i",
-    charge_limit: "Gi\u1edbi h\u1ea1n s\u1ea1c", time_to_limit: "Th\u1eddi gian \u0111\u1ebfn gi\u1edbi h\u1ea1n",
+    charge_limit: "Gi\u1edbi h\u1ea1n s\u1ea1c", time_to_limit: "Th\u1eddi gian \u0111\u1ebfn gi\u1edbi h\u1ea1n", estimated_limit_by: "D\u1ef1 ki\u1ebfn \u0111\u1ea1t gi\u1edbi h\u1ea1n l\u00fac",
     any_moment: "S\u1eafp xong",
     insight_week_up: "B\u1ea1n t\u0103ng {pct}% so v\u1edbi tu\u1ea7n tr\u01b0\u1edbc ({a} so v\u1edbi {b}).",
     insight_week_down: "B\u1ea1n gi\u1ea3m {pct}% so v\u1edbi tu\u1ea7n tr\u01b0\u1edbc ({a} so v\u1edbi {b}).",
@@ -1559,21 +1570,28 @@ function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, batte
   document.getElementById('status-idle-detail').textContent = lastUpdated ? `${t('updated')} ${relativeTime(lastUpdated)}` : '';
 
   const grid = document.getElementById('status-grid');
-  grid.style.display = 'grid';
+  grid.style.display = 'block';
   grid.innerHTML = `
-    <div class="status-stat"><div class="k">${t('started')}</div><div class="v">${fmtTime(session.started_at)}</div></div>
-    <div class="status-stat"><div class="k">${t('charging_speed')}</div><div class="v">${currentPowerKw != null ? `${currentPowerKw.toFixed(1)} kW` : '—'}</div></div>
-    <div class="status-stat"><div class="k">${t('elapsed')}</div><div class="v">${fmtElapsed(session.started_at)}</div></div>
-    <div class="status-stat"><div class="k">${t('energy_so_far')}</div><div class="v">${fmtKwh(energyKwh)}</div></div>
-    <div class="status-stat"><div class="k">${t('cost_so_far')}</div><div class="v">${fmtMoney(costSoFar)}</div></div>
-    ${pctLimit != null ? `
-      <div class="status-stat"><div class="k">${t('charge_limit')}</div><div class="v">${pctLimit}%</div></div>
-      <div class="status-stat"><div class="k">${t('time_to_limit')}</div><div class="v">${limitTarget ? fmtRemaining(limitTarget) : '—'}</div></div>
-    ` : ''}
-    ${fullByTarget ? `
-      <div class="status-stat"><div class="k">${t('estimated_full_by')}</div><div class="v">${fmtFullByDate(fullByTarget)}</div></div>
-      <div class="status-stat"><div class="k">${t('time_remaining')}</div><div class="v">${fmtRemaining(fullByTarget)}</div></div>
-    ` : ''}
+    <div class="status-section-label">Time</div>
+    <div class="status-subgrid">
+      <div class="status-stat"><div class="k">${t('started')}</div><div class="v">${fmtTime(session.started_at)}</div></div>
+      <div class="status-stat"><div class="k">${t('elapsed')}</div><div class="v">${fmtElapsed(session.started_at)}</div></div>
+      ${pctLimit != null ? `
+        <div class="status-stat"><div class="k">${t('charge_limit')}</div><div class="v">${pctLimit}%</div></div>
+        <div class="status-stat"><div class="k">${t('time_to_limit')}</div><div class="v">${limitTarget ? fmtRemaining(limitTarget) : '—'}</div></div>
+        <div class="status-stat"><div class="k">${t('estimated_limit_by')}</div><div class="v">${limitTarget ? fmtFullByDate(limitTarget) : '—'}</div></div>
+      ` : ''}
+      ${fullByTarget ? `
+        <div class="status-stat"><div class="k">${t('time_remaining')}</div><div class="v">${fmtRemaining(fullByTarget)}</div></div>
+        <div class="status-stat"><div class="k">${t('estimated_full_by')}</div><div class="v">${fmtFullByDate(fullByTarget)}</div></div>
+      ` : ''}
+    </div>
+    <div class="status-section-label">Power &amp; Cost</div>
+    <div class="status-subgrid">
+      <div class="status-stat"><div class="k">${t('charging_speed')}</div><div class="v">${currentPowerKw != null ? `${currentPowerKw.toFixed(1)} kW` : '—'}</div></div>
+      <div class="status-stat"><div class="k">${t('energy_so_far')}</div><div class="v">${fmtKwh(energyKwh)}</div></div>
+      <div class="status-stat"><div class="k">${t('cost_so_far')}</div><div class="v">${fmtMoney(costSoFar)}</div></div>
+    </div>
   `;
   document.getElementById('stop-attempt-btn').style.display = 'block';
   document.getElementById('start-charge-btn').style.display = 'none';
