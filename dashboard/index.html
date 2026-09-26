@@ -1577,7 +1577,7 @@ function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, batte
       <div class="status-stat"><div class="k">${t('started')}</div><div class="v">${fmtTime(session.started_at)}</div></div>
       <div class="status-stat"><div class="k">${t('elapsed')}</div><div class="v">${fmtElapsed(session.started_at)}</div></div>
       ${pctLimit != null ? `
-        <div class="status-stat"><div class="k">${t('charge_limit')}</div><div class="v">${pctLimit}%</div></div>
+        <div class="status-stat" style="grid-column:1/-1;"><div class="k">${t('charge_limit')}</div><div class="v">${pctLimit}%</div></div>
         <div class="status-stat"><div class="k">${t('time_to_limit')}</div><div class="v">${limitTarget ? fmtRemaining(limitTarget) : '—'}</div></div>
         <div class="status-stat"><div class="k">${t('estimated_limit_by')}</div><div class="v">${limitTarget ? fmtFullByDate(limitTarget) : '—'}</div></div>
       ` : ''}
