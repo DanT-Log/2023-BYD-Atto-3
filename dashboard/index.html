@@ -1073,8 +1073,10 @@
           <div class="group-header" data-i18n="auto_stop_header">Auto-Stop Charging</div>
           <div class="group-card">
             <div class="settings-row"><label data-i18n="auto_stop_pct">Stop at % (blank = off)</label><input type="number" step="1" min="20" max="100" id="s-auto-stop-pct" placeholder="off"></div>
+            <div class="settings-row"><label data-i18n="night_topup_label">Auto-charge overnight (12am-6am) to reach limit</label><input type="checkbox" id="s-night-topup" style="width:22px;height:22px;"></div>
           </div>
           <div class="settings-note" id="auto-stop-note" data-i18n="auto_stop_note">Experimental: retries every poll until the car actually stops. Not guaranteed to work every time -- always double-check.</div>
+          <div class="settings-note" data-i18n="night_topup_note">If enabled, and the car is plugged in but under the % above during 12am-6am, sends a start command automatically -- for confining charging to a cheap overnight rate window. Only starts, never overrides the stop limit.</div>
         </div>
         <div class="group">
           <div class="group-header" data-i18n="petrol_header">Petrol Comparison</div>
@@ -1167,6 +1169,8 @@ const TRANSLATIONS = {
     home_detection_header: "Home Detection", home_radius: "Home radius (metres)",
     polling_header: "Polling", poll_interval: "Poll interval (minutes)",
     auto_stop_header: "Auto-Stop Charging", auto_stop_pct: "Stop at % (blank = off)",
+    night_topup_label: "Auto-charge overnight (12am-6am) to reach limit",
+    night_topup_note: "If enabled, and the car is plugged in but under the % above during 12am-6am, sends a start command automatically \u2014 for confining charging to a cheap overnight rate window. Only starts, never overrides the stop limit.",
     auto_stop_note: "Experimental: retries every poll until the car actually stops. Not guaranteed to work every time \u2014 always double-check.",
     petrol_header: "Petrol Comparison", petrol_price: "Petrol price ($/L)", petrol_consumption: "Petrol consumption (L/100km)",
     save_settings: "Save Settings", saved: "Saved.", save_failed: "Failed to save \u2014 try again.",
@@ -1273,6 +1277,8 @@ const TRANSLATIONS = {
     home_detection_header: "Nh\u1eadn di\u1ec7n v\u1ecb tr\u00ed nh\u00e0", home_radius: "B\u00e1n k\u00ednh nh\u00e0 (m\u00e9t)",
     polling_header: "T\u1ea7n su\u1ea5t ki\u1ec3m tra", poll_interval: "T\u1ea7n su\u1ea5t ki\u1ec3m tra (ph\u00fat)",
     auto_stop_header: "T\u1ef1 \u0111\u1ed9ng d\u1eebng s\u1ea1c", auto_stop_pct: "D\u1eebng \u1edf % (\u0111\u1ec3 tr\u1ed1ng = t\u1eaft)",
+    night_topup_label: "T\u1ef1 \u0111\u1ed9ng s\u1ea1c qua \u0111\u00eam (0h-6h) \u0111\u1ec3 \u0111\u1ea1t gi\u1edbi h\u1ea1n",
+    night_topup_note: "N\u1ebfu b\u1eadt, v\u00e0 xe \u0111ang c\u1eafm s\u1ea1c nh\u01b0ng d\u01b0\u1edbi % \u1edf tr\u00ean trong kho\u1ea3ng 0h-6h, s\u1ebd t\u1ef1 \u0111\u1ed9ng g\u1eedi l\u1ec7nh b\u1eaft \u0111\u1ea7u \u2014 \u0111\u1ec3 gi\u1edbi h\u1ea1n s\u1ea1c trong khung gi\u1edd r\u1ebb qua \u0111\u00eam. Ch\u1ec9 b\u1eaft \u0111\u1ea7u, kh\u00f4ng bao gi\u1edd v\u01b0\u1ee3t qua gi\u1edbi h\u1ea1n d\u1eebng.",
     auto_stop_note: "Th\u1eed nghi\u1ec7m: th\u1eed l\u1ea1i m\u1ed7i l\u1ea7n ki\u1ec3m tra cho \u0111\u1ebfn khi xe th\u1ef1c s\u1ef1 d\u1eebng. Kh\u00f4ng \u0111\u1ea3m b\u1ea3o ho\u1ea1t \u0111\u1ed9ng m\u1ecdi l\u1ea7n \u2014 lu\u00f4n ki\u1ec3m tra l\u1ea1i.",
     petrol_header: "So s\u00e1nh v\u1edbi x\u0103ng", petrol_price: "Gi\u00e1 x\u0103ng ($/L)", petrol_consumption: "M\u1ee9c ti\u00eau th\u1ee5 x\u0103ng (L/100km)",
     save_settings: "L\u01b0u c\u00e0i \u0111\u1eb7t", saved: "\u0110\u00e3 l\u01b0u.", save_failed: "L\u01b0u th\u1ea5t b\u1ea1i \u2014 th\u1eed l\u1ea1i.",
@@ -2625,6 +2631,7 @@ async function populateSettingsForm() {
   document.getElementById('s-home-radius').value = s.home_radius_m ?? '';
   document.getElementById('s-poll-interval').value = s.poll_interval_minutes ?? '';
   document.getElementById('s-auto-stop-pct').value = s.auto_stop_at_pct ?? '';
+  document.getElementById('s-night-topup').checked = !!s.night_topup_enabled;
   document.getElementById('s-petrol-price').value = s.petrol_price_per_l ?? '';
   document.getElementById('s-petrol-consumption').value = s.petrol_l_per_100km ?? '';
 }
@@ -2703,6 +2710,7 @@ document.getElementById('settings-save-btn').addEventListener('click', async () 
     }
   }
   payload.auto_stop_at_pct = autoStopValue;
+  payload.night_topup_enabled = document.getElementById('s-night-topup').checked;
 
   let passkey = await getPasskey();
   if (!passkey) { status.textContent = ''; return; }

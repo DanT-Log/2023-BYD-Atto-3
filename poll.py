@@ -207,6 +207,30 @@ def notify_auto_stop(success: bool, pct: float, threshold: int) -> None:
         print(f"warning: ntfy notification failed: {exc}", file=sys.stderr)
 
 
+def notify_night_topup(success: bool, pct: float, threshold: int) -> None:
+    if not NTFY_TOPIC:
+        print("notify skipped: NTFY_TOPIC is not set", file=sys.stderr)
+        return
+
+    if success:
+        title = "BYD Atto 3 \u2014 night top-up started"
+        message = f"Battery at {pct}% (under your {threshold}% limit) during the overnight window \u2014 start command sent."
+    else:
+        title = "BYD Atto 3 \u2014 night top-up FAILED"
+        message = f"Battery at {pct}%, tried to start overnight top-up but the command errored. Will retry next poll."
+
+    try:
+        resp = requests.post(
+            f"https://ntfy.sh/{NTFY_TOPIC}",
+            data=message.encode("utf-8"),
+            headers={"Title": title, "Priority": "default"},
+            timeout=10,
+        )
+        print(f"ntfy night-topup notification sent: status={resp.status_code}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"warning: ntfy notification failed: {exc}", file=sys.stderr)
+
+
 async def attempt_auto_stop_async() -> None:
     """Same schedule-window-closed trick validated in control.py's stop
     attempt -- confirmed via live testing to actually pause charging.
@@ -228,6 +252,23 @@ async def attempt_auto_stop_async() -> None:
             charge_way="s",
             enabled=True,
         )
+
+
+NIGHT_TOPUP_WINDOW_START_HOUR = 0  # 12am
+NIGHT_TOPUP_WINDOW_END_HOUR = 6    # 6am, exclusive
+
+
+async def attempt_night_topup_async() -> None:
+    """Officially documented start_charging() call, confirmed working
+    during earlier live testing (same command control.py's Start
+    Charging button uses). Only called from within the configured
+    overnight window when the car is plugged in but not charging and
+    still under the configured limit -- see the call site in main()."""
+    config = BydConfig.from_env()
+    async with BydClient(config) as client:
+        vehicles = await client.get_vehicles()
+        vin = vehicles[0].vin
+        await client.start_charging(vin)
 
 
 def notify_charge_started(location_type: str, start_pct: float | None) -> None:
@@ -338,10 +379,20 @@ async def fetch_vehicle_state() -> dict:
             except (TypeError, ValueError):
                 charging_power_kw = None
 
+        # connectState: whether the charging cable is physically plugged
+        # in, distinct from is_charging (plugged in but paused/scheduled
+        # counts as connected but not charging). Same raw dict and same
+        # camelCase convention already confirmed working for chargePower
+        # above -- not independently verified the way the door locks
+        # were, but the failure mode here is low-stakes: worst case is a
+        # harmless no-op start command if nothing's actually plugged in.
+        connect_state = charging_raw.get("connectState")
+
         return {
             "battery_pct": battery_pct,
             "is_charging": is_charging,
             "charging_power_kw": charging_power_kw,
+            "connect_state": connect_state,
             "odometer_km": realtime.total_mileage,
             "range_km": realtime.ev_endurance,
             # Time-to-full comes from the dedicated charging endpoint (ChargingStatus),
@@ -566,6 +617,30 @@ def main() -> None:
             except Exception as exc:
                 print(f"auto-stop: command failed: {exc}", file=sys.stderr)
                 notify_auto_stop(False, state["battery_pct"], threshold)
+
+    # Night top-up: if enabled, and it's currently within the overnight
+    # window, and the car is plugged in but not already charging, and
+    # still under the configured limit, send a start command. Checked
+    # every poll the condition holds, same retry-on-failure reasoning as
+    # auto-stop above. Deliberately does NOT fire outside the window
+    # (the whole point is confining charging to the cheap rate period)
+    # or once already at/above the limit (this is a top-up, not a
+    # full recharge to 100%).
+    if not current_is_charging and state["battery_pct"] is not None:
+        settings = get_tracker_settings()
+        if settings.get("night_topup_enabled"):
+            now_local = datetime.now(VEHICLE_TZ)
+            in_window = NIGHT_TOPUP_WINDOW_START_HOUR <= now_local.hour < NIGHT_TOPUP_WINDOW_END_HOUR
+            threshold = settings.get("auto_stop_at_pct")
+            is_plugged_in = state.get("connect_state") not in (None, 0, "0")
+            if in_window and is_plugged_in and threshold is not None and float(state["battery_pct"]) < float(threshold):
+                try:
+                    asyncio.run(attempt_night_topup_async())
+                    print(f"night top-up: battery at {state['battery_pct']}% < limit {threshold}%, start command sent")
+                    notify_night_topup(True, state["battery_pct"], threshold)
+                except Exception as exc:
+                    print(f"night top-up: command failed: {exc}", file=sys.stderr)
+                    notify_night_topup(False, state["battery_pct"], threshold)
 
 
 if __name__ == "__main__":
