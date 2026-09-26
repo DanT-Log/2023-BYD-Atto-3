@@ -644,6 +644,19 @@ def main() -> None:
 
         if pct_enabled or time_enabled:
             threshold = settings.get("auto_stop_at_pct")
+            # Hysteresis: restart only once battery drops to this LOWER
+            # threshold, not just under the stop threshold itself.
+            # Without this gap, a battery reading hovering right at the
+            # stop threshold (measurement noise, a sliver of standby
+            # drain) could trigger rapid stop/start cycling -- repeated
+            # BYD API commands, notification spam, and needless wear on
+            # the charging contactor. Falls back to the stop threshold
+            # itself (no gap) only if restart_at_pct was never set, for
+            # backward compatibility with settings saved before this
+            # existed.
+            restart_threshold = settings.get("restart_at_pct")
+            if restart_threshold is None:
+                restart_threshold = threshold
             battery_pct = float(state["battery_pct"])
             now_local = datetime.now(VEHICLE_TZ)
             in_window = time_enabled and time_in_window(
@@ -655,7 +668,7 @@ def main() -> None:
 
             over_limit = pct_enabled and threshold is not None and battery_pct >= float(threshold)
             outside_window = time_enabled and not in_window
-            under_limit = (not pct_enabled) or (threshold is not None and battery_pct < float(threshold))
+            under_limit = (not pct_enabled) or (restart_threshold is not None and battery_pct < float(restart_threshold))
             should_charge_now = (not time_enabled or in_window) and under_limit
 
             if current_is_charging and (over_limit or outside_window):
@@ -675,9 +688,9 @@ def main() -> None:
 
             elif not current_is_charging and is_plugged_in and should_charge_now:
                 if pct_enabled and time_enabled:
-                    reason = f"under {threshold}% and inside the configured time window"
+                    reason = f"under {restart_threshold}% and inside the configured time window"
                 elif pct_enabled:
-                    reason = f"under {threshold}% limit"
+                    reason = f"under {restart_threshold}% restart threshold"
                 else:
                     reason = "inside the configured time window"
                 try:
