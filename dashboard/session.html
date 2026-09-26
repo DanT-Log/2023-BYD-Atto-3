@@ -625,54 +625,55 @@ async function loadChargingCurve(s) {
 }
 
 async function loadEfficiencyAndFun(s) {
-  // Previously this paired THIS charge's km against the PRECEDING
-  // charge's TOTAL energy added -- which only works if the battery was
-  // driven down to near-empty between charges. For anyone who tops up
-  // frequently (normal EV usage, not an edge case), that wildly
-  // overstates consumption: a charge that added 17kWh (~169km of
-  // range) but was followed by an 8km drive before the next top-up
-  // would attribute the WHOLE 17kWh/cost to those 8km, since most of
-  // that energy is still sitting in the battery, unused.
+  // Most precise available method: directly measure the battery % lost
+  // during the actual driving that happened between the end of the
+  // PRECEDING charge and the start of THIS one, using our own snapshot
+  // history -- not the car's own self-reported efficiency (its own
+  // internal estimate, unverified), and not the old broken approach
+  // (attributing a whole preceding charge's total energy to a short
+  // subsequent drive, which breaks under frequent top-ups).
   //
-  // Fixed to use the car's own reported efficiency instead, which
-  // reflects actual per-km consumption regardless of charging
-  // cadence, plus a blended average rate across all charging history
-  // (rather than one arbitrary preceding session's rate, which has
-  // the same top-up-distortion problem).
+  // Only % drops where the odometer was actually moving count --
+  // standby/vampire drain while parked is excluded, using the same
+  // logic as the Standby Loss card, just inverted (that one sums
+  // parked-only drops; this sums driving-only drops).
   const km = s.km_since_last_charge != null ? Number(s.km_since_last_charge) : null;
   if (km == null || km <= 0) return; // first tracked charge, or no driving recorded before it
 
   try {
-    const [snapRows, allSessions, settingsRows] = await Promise.all([
-      sb(`vehicle_snapshots?car_reported_kwh_per_100km=not.is.null&recorded_at=lte.${encodeURIComponent(s.started_at)}&select=car_reported_kwh_per_100km&order=recorded_at.desc&limit=1`),
-      sb('charging_sessions?ended_at=not.is.null&select=energy_added_kwh,cost'),
-      sb('tracker_settings?select=petrol_price_per_l,petrol_l_per_100km'),
-    ]);
+    const prevRows = await sb(`charging_sessions?started_at=lt.${encodeURIComponent(s.started_at)}&ended_at=not.is.null&select=ended_at,electricity_rate&order=started_at.desc&limit=1`);
+    const prev = prevRows[0];
+    if (!prev) return;
 
-    const carEfficiency = snapRows[0]?.car_reported_kwh_per_100km != null ? Number(snapRows[0].car_reported_kwh_per_100km) : null;
-    if (carEfficiency == null) return; // no reported efficiency available yet to base this on
+    const snapshots = await sb(`vehicle_snapshots?recorded_at=gte.${encodeURIComponent(prev.ended_at)}&recorded_at=lte.${encodeURIComponent(s.started_at)}&select=recorded_at,battery_pct,odometer_km,is_charging&order=recorded_at.asc`);
 
-    let totalKwh = 0, totalCost = 0;
-    allSessions.forEach(sess => {
-      if (sess.energy_added_kwh != null && sess.cost != null) {
-        totalKwh += Number(sess.energy_added_kwh);
-        totalCost += Number(sess.cost);
+    let drivingPctLoss = 0;
+    for (let i = 1; i < snapshots.length; i++) {
+      const a = snapshots[i - 1], b = snapshots[i];
+      if (a.is_charging || b.is_charging) continue;
+      if (a.odometer_km == null || b.odometer_km == null || a.battery_pct == null || b.battery_pct == null) continue;
+      if (Number(b.odometer_km) > Number(a.odometer_km)) { // odometer moved -- this segment was driving
+        const drop = Number(a.battery_pct) - Number(b.battery_pct);
+        if (drop > 0) drivingPctLoss += drop;
       }
-    });
-    const blendedRate = totalKwh > 0 ? totalCost / totalKwh : null;
+    }
+    if (drivingPctLoss <= 0) return; // no measurable driving-attributable loss captured
 
-    const kwhUsed = (km / 100) * carEfficiency;
+    const settingsRows = await sb('tracker_settings?select=battery_capacity_kwh,petrol_price_per_l,petrol_l_per_100km');
+    const settings = settingsRows[0];
+    if (!settings?.battery_capacity_kwh) return;
+
+    const kwhUsed = (drivingPctLoss / 100) * Number(settings.battery_capacity_kwh);
+    const efficiency = (kwhUsed / km) * 100; // kWh/100km
+    const rate = prev.electricity_rate != null ? Number(prev.electricity_rate) : null;
 
     document.getElementById('efficiency-section').style.display = 'block';
-    document.getElementById('charge-efficiency-value').textContent = `${carEfficiency.toFixed(1)} kWh/100km`;
+    document.getElementById('charge-efficiency-value').textContent = `${efficiency.toFixed(1)} kWh/100km`;
     document.getElementById('charge-energy-used').textContent = fmtKwh(kwhUsed);
-
-    const settings = settingsRows[0];
-    if (!settings) return;
 
     const litresEquivalent = (km / 100) * settings.petrol_l_per_100km;
     const petrolCost = litresEquivalent * settings.petrol_price_per_l;
-    const electricityCost = blendedRate != null ? kwhUsed * blendedRate : null;
+    const electricityCost = rate != null ? kwhUsed * rate : null;
     const co2Kg = litresEquivalent * 2.31;
 
     document.getElementById('fun-section').style.display = 'block';
@@ -681,7 +682,7 @@ async function loadEfficiencyAndFun(s) {
       ${electricityCost != null ? `
         <div class="fun-line" style="margin-top:8px;">You spent about <b>${fmtMoney(electricityCost)}</b> in electricity instead \u2014 roughly <b>${fmtMoney(petrolCost - electricityCost)}</b> saved, and about <b>${co2Kg.toFixed(0)} kg</b> of CO\u2082 avoided.</div>
       ` : ''}
-      <div class="fun-note">Based on the car's own reported efficiency (${carEfficiency.toFixed(1)} kWh/100km) and your average rate across all charging history \u2014 a rough comparison, not precise accounting.</div>
+      <div class="fun-note">Based on the actual battery % lost while driving these km (${drivingPctLoss.toFixed(1)}%, standby drain excluded) and the previous charge's rate \u2014 a rough comparison, not precise accounting.</div>
     `;
   } catch (err) {
     console.error('efficiency/fun load failed', err);
