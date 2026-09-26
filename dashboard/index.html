@@ -2982,9 +2982,8 @@ setInterval(load, 60000);
      excludes location/Home-Public info regardless of unlock state,
      since sharing sends this outside the app entirely. -->
 <div id="share-card" style="position:fixed; left:-9999px; top:0; width:360px; padding:28px 24px; background:linear-gradient(160deg, #1C1C1E 0%, #2C2C2E 100%); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; color:#fff; border-radius:20px;">
-  <div style="display:flex; align-items:center; gap:8px; margin-bottom:20px;">
-    <svg viewBox="0 0 24 24" fill="#34C759" style="width:20px; height:20px;"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
-    <span style="font-size:15px; font-weight:600; opacity:0.85;">Atto 3</span>
+  <div style="display:flex; align-items:center; margin-bottom:20px;">
+    <svg viewBox="0 0 24 24" fill="#34C759" style="width:22px; height:22px;"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
   </div>
   <div id="share-card-title" style="font-size:24px; font-weight:700; margin-bottom:4px;">Charging</div>
   <div id="share-card-sub" style="font-size:14px; opacity:0.6; margin-bottom:22px;"></div>
@@ -3015,12 +3014,22 @@ async function shareCurrentStatus() {
     const pctMatch = titleText.match(/(\d+%\s*\u2192\s*\d+%|\d+%)/);
     titleEl.textContent = 'Charging' + (pctMatch ? ` \u2014 ${pctMatch[0]}` : '');
     subEl.textContent = getStat('Started') ? `Started ${getStat('Started')}` : '';
-    statsEl.innerHTML = [
+
+    const blocks = [
       statBlock('Elapsed', getStat('Elapsed') || '\u2014'),
+      statBlock('Charging speed', getStat('Charging speed') || '\u2014'),
       statBlock('Energy so far', getStat('Energy so far') || '\u2014'),
       statBlock('Cost so far', getStat('Cost so far') || '\u2014'),
-      statBlock('Charging speed', getStat('Charging speed') || '\u2014'),
-    ].join('');
+    ];
+    // Only shown when a % limit is actually configured -- matches the
+    // dashboard's own conditional display, no placeholder dashes for a
+    // feature that isn't even turned on.
+    const chargeLimit = getStat('Charge limit');
+    if (chargeLimit) {
+      blocks.push(statBlock('Charge limit', chargeLimit));
+      blocks.push(statBlock('Time to limit', getStat('Time to limit') || '\u2014'));
+    }
+    statsEl.innerHTML = blocks.join('');
   } else {
     const titleText = document.getElementById('status-title').textContent;
     const pctMatch = titleText.match(/\d+%/);
