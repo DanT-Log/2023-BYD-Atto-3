@@ -383,7 +383,7 @@ def get_poll_interval_minutes() -> int:
         return 5
 
 
-FAST_CHARGE_KW_THRESHOLD = 5.0  # above this, assume DC fast charging and poll every ~1 min instead of the configured interval
+FAST_CHARGE_KW_THRESHOLD = 2.0  # above this, assume public/fast charging and poll every ~1 min. Every observed home session has held steady at 1.4-1.5kW, so 2.0 gives a clean margin above that while still catching public sessions that dip lower than the original 5.0 cutoff did.
 
 
 def should_throttle(prev_snapshot: dict | None, interval_minutes: int, trigger_source: str = "normal") -> bool:
