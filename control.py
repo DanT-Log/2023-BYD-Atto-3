@@ -67,7 +67,34 @@ def notify(title: str, message: str) -> None:
         print(f"warning: ntfy notification failed: {exc}", file=sys.stderr)
 
 
+def clear_manual_charge_override() -> None:
+    """Manual Stop should always win -- if a 'Charge Now For X' override
+    is still active (future manual_charge_until), leaving it in place
+    would mean poll.py's automation sees 'override active, not
+    charging, plugged in' on the very next poll and silently restarts
+    it, undoing this manual stop within minutes. Cleared unconditionally
+    whenever Stop is pressed, regardless of whether an override was
+    actually active or the stop command itself succeeds."""
+    try:
+        resp = requests.patch(
+            f"{SUPABASE_URL}/rest/v1/tracker_settings?id=eq.true",
+            headers={
+                "apikey": SUPABASE_SERVICE_KEY,
+                "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={"manual_charge_until": None},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        print("cleared manual_charge_until (if any was set)")
+    except Exception as exc:
+        print(f"warning: failed to clear manual_charge_until: {exc}", file=sys.stderr)
+
+
 async def attempt_stop(client: BydClient, vin: str) -> None:
+    clear_manual_charge_override()
+
     before = await client.get_charging_status(vin)
     print(f"charging state before stop attempt: {before.charging_state}, soc={before.soc}")
 
