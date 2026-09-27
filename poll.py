@@ -835,7 +835,20 @@ def main() -> None:
 
             over_limit = pct_enabled and threshold is not None and battery_pct >= float(threshold)
             outside_window = time_enabled and not in_window
-            under_limit = (not pct_enabled) or (restart_threshold is not None and battery_pct <= float(restart_threshold))
+            # The restart hysteresis gap (75% vs 80%) exists purely to
+            # prevent rapid stop/start cycling when % is the ONLY gate.
+            # Once a time window is ALSO enabled, the window itself
+            # already provides that separation -- it structurally can't
+            # restart before the window opens regardless of %. Requiring
+            # it to ALSO wait for the lower restart threshold at that
+            # point is unnecessary and wrong: sitting at 77% right when
+            # the window opens should start immediately (under the 80%
+            # target), not keep waiting for a drop to 75% that the
+            # window's own gating already made redundant.
+            if time_enabled:
+                under_limit = (not pct_enabled) or (threshold is not None and battery_pct < float(threshold))
+            else:
+                under_limit = (not pct_enabled) or (restart_threshold is not None and battery_pct <= float(restart_threshold))
             should_charge_now = (not time_enabled or in_window) and under_limit
 
             if current_is_charging and (over_limit or outside_window):
