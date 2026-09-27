@@ -1,5 +1,20 @@
 name: Poll BYD Atto 3
 
+# Prevents overlapping runs: the 5-min and 1-min crons both dispatch
+# this same workflow, and during busy periods (like tight polling
+# right at a window boundary) a new trigger could fire while a
+# previous run is still mid-flight. Confirmed live to cause real
+# failures -- two overlapping logins to the same BYD account caused a
+# BydCryptoError (AES padding failure) decrypting a response, almost
+# certainly because a fresh login invalidated the session token an
+# in-flight request was still relying on. cancel-in-progress: false
+# means new triggers QUEUE and wait their turn rather than cancelling
+# an in-flight run, which could otherwise interrupt a stop/start
+# command mid-transaction and leave things in an inconsistent state.
+concurrency:
+  group: poll-byd-atto3
+  cancel-in-progress: false
+
 on:
   # Triggered every 5 minutes by a Supabase pg_cron job calling the
   # "trigger-poll" Edge Function, which hits this workflow_dispatch
