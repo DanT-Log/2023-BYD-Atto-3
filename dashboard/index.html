@@ -1672,6 +1672,29 @@ function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, batte
 // move -- same isolation logic as the Standby Loss card, just over a
 // shorter recent window so it reflects current conditions (e.g. drain
 // is measurably faster at high SOC, as found when investigating this).
+// Mirrors poll.py's time_in_window -- handles a window that wraps past
+// midnight (e.g. 22:00-06:00), not just same-day start<end windows.
+function timeInWindowJS(now, startStr, endStr) {
+  const [sh, sm] = startStr.split(':').map(Number);
+  const [eh, em] = endStr.split(':').map(Number);
+  const startMin = sh * 60 + sm;
+  const endMin = eh * 60 + em;
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  if (startMin === endMin) return true;
+  if (startMin < endMin) return startMin <= nowMin && nowMin < endMin;
+  return nowMin >= startMin || nowMin < endMin;
+}
+
+// Next Date instance of a given "HH:MM" from now -- today if it hasn't
+// happened yet, tomorrow if it has already passed today.
+function nextOccurrenceOf(timeStr) {
+  const [h, m] = timeStr.split(':').map(Number);
+  const next = new Date();
+  next.setHours(h, m, 0, 0);
+  if (next <= new Date()) next.setDate(next.getDate() + 1);
+  return next;
+}
+
 async function computeRecentStandbyRate() {
   const cutoff = new Date(Date.now() - 48 * 3600000).toISOString();
   const rows = await sb(`vehicle_snapshots?recorded_at=gte.${encodeURIComponent(cutoff)}&select=recorded_at,battery_pct,odometer_km,is_charging&order=recorded_at.asc`);
@@ -1771,21 +1794,43 @@ async function loadLiveStatus() {
     } else {
       const [latest, settingsRows] = await Promise.all([
         sb('vehicle_snapshots?select=battery_pct,range_km,recorded_at&order=recorded_at.desc&limit=1'),
-        sb('tracker_settings?select=pct_limit_enabled,auto_stop_at_pct,restart_at_pct'),
+        sb('tracker_settings?select=pct_limit_enabled,auto_stop_at_pct,restart_at_pct,time_window_enabled,window_start_time,window_end_time'),
       ]);
       const snapshot = latest[0] || null;
       const settings = settingsRows[0] || {};
 
       let restartTarget = null;
-      if (snapshot && settings.pct_limit_enabled && settings.restart_at_pct != null && settings.auto_stop_at_pct != null) {
+      if (snapshot && settings.pct_limit_enabled && settings.auto_stop_at_pct != null) {
         const pct = Number(snapshot.battery_pct);
-        const restartPct = Number(settings.restart_at_pct);
-        // Only meaningful in the "waiting to restart" zone: stopped at
-        // or above the target, not yet down to the restart threshold.
-        if (pct >= restartPct && pct < Number(settings.auto_stop_at_pct) + 1) {
-          const rate = await computeRecentStandbyRate();
-          if (rate && rate > 0 && pct > restartPct) {
-            restartTarget = new Date(new Date(snapshot.recorded_at).getTime() + ((pct - restartPct) / rate) * 3600000);
+        const target = Number(settings.auto_stop_at_pct);
+
+        if (settings.time_window_enabled && settings.window_start_time && settings.window_end_time) {
+          const nowInWindow = timeInWindowJS(new Date(), settings.window_start_time, settings.window_end_time);
+          if (!nowInWindow) {
+            // Outside the window entirely -- the real trigger is simply
+            // the window opening, not a % drain projection (the window
+            // itself is now the gate, per the fix to poll.py's logic).
+            restartTarget = nextOccurrenceOf(settings.window_start_time);
+          } else if (pct >= target) {
+            // Inside the window, stopped for hitting the target --
+            // matches poll.py's fixed logic: restart once under the
+            // target itself, not the lower hysteresis threshold (the
+            // window already provides the separation that threshold
+            // was for).
+            const rate = await computeRecentStandbyRate();
+            if (rate && rate > 0) {
+              restartTarget = new Date(new Date(snapshot.recorded_at).getTime() + ((pct - target + 1) / rate) * 3600000);
+            }
+          }
+        } else if (settings.restart_at_pct != null) {
+          const restartPct = Number(settings.restart_at_pct);
+          // % limit only, no time window -- hysteresis gap still
+          // applies here, matches poll.py's unchanged pct-only branch.
+          if (pct >= restartPct && pct < target + 1) {
+            const rate = await computeRecentStandbyRate();
+            if (rate && rate > 0 && pct > restartPct) {
+              restartTarget = new Date(new Date(snapshot.recorded_at).getTime() + ((pct - restartPct) / rate) * 3600000);
+            }
           }
         }
       }
