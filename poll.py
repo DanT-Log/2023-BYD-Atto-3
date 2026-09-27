@@ -713,6 +713,43 @@ def main() -> None:
     # effect immediately (BYD's cloud has a 1-2 min propagation delay,
     # confirmed during earlier testing) gets retried on the next poll
     # instead of silently giving up after one attempt.
+    # Manual "charge now for X" override: a self-clearing timer that
+    # takes priority over the % limit / time window automation below
+    # while active. Set by the dashboard as an absolute UTC timestamp
+    # (manual_charge_until) -- while now < that time, force charging on
+    # regardless of any configured limit or window; once elapsed, stop
+    # and clear the field so it doesn't keep re-firing.
+    manual_override_active = False
+    manual_until_str = settings.get("manual_charge_until")
+    if manual_until_str and state["battery_pct"] is not None:
+        manual_until_dt = parse_ts(manual_until_str)
+        now_utc = datetime.now(timezone.utc)
+        battery_pct = float(state["battery_pct"])
+        if now_utc < manual_until_dt:
+            manual_override_active = True
+            is_plugged_in = state.get("connect_state") not in (None, 0, "0")
+            if not current_is_charging and is_plugged_in:
+                try:
+                    asyncio.run(attempt_auto_start_async())
+                    print(f"manual charge override: active until {manual_until_str}, start command sent")
+                    notify_auto_start(True, battery_pct, f"manual charge-now override active until {manual_until_str}")
+                except Exception as exc:
+                    print(f"manual override start failed: {exc}", file=sys.stderr)
+                    notify_auto_start(False, battery_pct, "manual charge-now override")
+        else:
+            if current_is_charging:
+                try:
+                    asyncio.run(attempt_auto_stop_async())
+                    print("manual charge override: duration elapsed, stop command sent")
+                    notify_auto_stop(True, battery_pct, "manual charge-now duration elapsed")
+                except Exception as exc:
+                    print(f"manual override stop failed: {exc}", file=sys.stderr)
+                    notify_auto_stop(False, battery_pct, "manual charge-now duration elapsed")
+            try:
+                sb_patch("tracker_settings", "true", {"manual_charge_until": None})
+            except Exception as exc:
+                print(f"failed to clear manual_charge_until: {exc}", file=sys.stderr)
+
     # Charge automation: two independent toggles.
     #   pct_limit_enabled:  maintain battery <= auto_stop_at_pct, ANY time
     #                       (stops at the limit, auto-starts anytime it
@@ -726,7 +763,7 @@ def main() -> None:
     #   Neither on: no limit, no window -- if plugged in and idle,
     #       just start (nothing should be holding it back; matches
     #       normal EV behaviour with no smart charging at all)
-    if state["battery_pct"] is not None:
+    if not manual_override_active and state["battery_pct"] is not None:
         pct_enabled = bool(settings.get("pct_limit_enabled"))
         time_enabled = bool(settings.get("time_window_enabled"))
 

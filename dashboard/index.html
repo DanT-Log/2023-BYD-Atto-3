@@ -132,6 +132,34 @@
     cursor: pointer;
   }
   .stop-attempt-btn:active{ opacity: 0.5; }
+  .charge-for-row{
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .charge-for-row select{
+    flex: 1;
+    padding: 11px;
+    border-radius: 10px;
+    border: 0.5px solid var(--hairline);
+    background: var(--bg);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13.5px;
+  }
+  .charge-for-btn{
+    padding: 11px 18px;
+    border-radius: 10px;
+    border: none;
+    background: var(--green);
+    color: #fff;
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 590;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .charge-for-btn:active{ opacity: 0.6; }
   .stop-attempt-status{
     font-size: 12px;
     color: var(--text-secondary);
@@ -882,6 +910,17 @@
         <div class="status-idle-detail" id="status-idle-detail"></div>
         <button class="stop-attempt-btn" id="start-charge-btn" style="display:none;">Start Charging</button>
         <div class="stop-attempt-status" id="start-charge-status"></div>
+        <div class="charge-for-row" id="charge-for-row" style="display:none;">
+          <select id="charge-for-duration">
+            <option value="0.5">30 min</option>
+            <option value="1" selected>1 hour</option>
+            <option value="2">2 hours</option>
+            <option value="4">4 hours</option>
+            <option value="8">8 hours</option>
+          </select>
+          <button class="charge-for-btn" id="charge-for-btn">Charge Now</button>
+        </div>
+        <div class="stop-attempt-status" id="charge-for-status"></div>
         <div class="status-grid" id="status-grid" style="display:none;"></div>
         <button class="stop-attempt-btn" id="stop-attempt-btn" style="display:none;">Try Stop Charging (Experimental)</button>
         <div class="stop-attempt-status" id="stop-attempt-status"></div>
@@ -1625,6 +1664,7 @@ function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, batte
   `;
   document.getElementById('stop-attempt-btn').style.display = 'block';
   document.getElementById('start-charge-btn').style.display = 'none';
+  document.getElementById('charge-for-row').style.display = 'none';
 }
 
 // Computes the recent standby (parked, not charging) drain rate in
@@ -1656,6 +1696,7 @@ function renderIdleStatus(snapshot, restartTarget) {
   document.getElementById('status-grid').style.display = 'none';
   document.getElementById('stop-attempt-btn').style.display = 'none';
   document.getElementById('start-charge-btn').style.display = 'block';
+  document.getElementById('charge-for-row').style.display = 'flex';
 
   if (!snapshot) {
     document.getElementById('status-title').textContent = t('not_charging');
@@ -2702,6 +2743,42 @@ startChargeBtn.addEventListener('click', async () => {
   if (!passkey) return;
 
   await sendControlAction('start', startChargeBtn, startChargeStatus, passkey);
+});
+
+const chargeForBtn = document.getElementById('charge-for-btn');
+const chargeForStatus = document.getElementById('charge-for-status');
+
+chargeForBtn.addEventListener('click', async () => {
+  const hours = parseFloat(document.getElementById('charge-for-duration').value);
+  const label = hours < 1 ? `${hours * 60} min` : `${hours} hour${hours === 1 ? '' : 's'}`;
+  const confirmed = confirm(
+    `This will start charging now and automatically stop after ${label}, overriding any % limit or time window while active.\n\nContinue?`
+  );
+  if (!confirmed) return;
+
+  const passkey = await getPasskey();
+  if (!passkey) return;
+
+  chargeForBtn.disabled = true;
+  chargeForStatus.textContent = 'Setting up...';
+  chargeForStatus.classList.remove('error');
+  try {
+    const until = new Date(Date.now() + hours * 3600000).toISOString();
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/edit-settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passkey, manual_charge_until: until }),
+    });
+    if (!res.ok) throw new Error('request failed');
+    chargeForStatus.textContent = `Charging for ${label} -- should start within a minute.`;
+    setTimeout(() => load(), 20000);
+  } catch (err) {
+    chargeForStatus.textContent = 'Failed to set up charge-now. Try again.';
+    chargeForStatus.classList.add('error');
+  } finally {
+    chargeForBtn.disabled = false;
+    setTimeout(() => { chargeForStatus.textContent = ''; }, 8000);
+  }
 });
 
 let appUnlocked = false; // resets on page reload -- deliberately re-locks each fresh visit
