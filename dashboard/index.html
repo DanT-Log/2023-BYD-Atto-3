@@ -1744,7 +1744,7 @@ async function loadLiveStatus() {
         if (pct >= restartPct && pct < Number(settings.auto_stop_at_pct) + 1) {
           const rate = await computeRecentStandbyRate();
           if (rate && rate > 0 && pct > restartPct) {
-            restartTarget = new Date(Date.now() + ((pct - restartPct) / rate) * 3600000);
+            restartTarget = new Date(new Date(snapshot.recorded_at).getTime() + ((pct - restartPct) / rate) * 3600000);
           }
         }
       }
