@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: 'start or stop'
+        description: 'start, stop, or set-schedule'
         required: true
         default: 'stop'
 
@@ -30,3 +30,5 @@ jobs:
           BYD_CONTROL_PIN: ${{ secrets.BYD_CONTROL_PIN }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           CONTROL_ACTION: ${{ github.event.inputs.action }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}

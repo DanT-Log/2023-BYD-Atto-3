@@ -34,6 +34,22 @@ NTFY_TOPIC = os.environ.get("NTFY_TOPIC")
 CONTROL_ACTION = os.environ.get("CONTROL_ACTION", "stop")
 VEHICLE_TZ = ZoneInfo("Australia/Sydney")
 
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+
+
+def get_tracker_settings() -> dict:
+    resp = requests.get(
+        f"{SUPABASE_URL}/rest/v1/tracker_settings?select=window_start_time,window_end_time",
+        headers={"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    rows = resp.json()
+    if not rows:
+        raise RuntimeError("tracker_settings table is empty")
+    return rows[0]
+
 
 def notify(title: str, message: str) -> None:
     if not NTFY_TOPIC:
@@ -112,6 +128,32 @@ async def attempt_start(client: BydClient, vin: str) -> None:
         )
 
 
+async def attempt_set_schedule(client: BydClient, vin: str) -> None:
+    settings = get_tracker_settings()
+    window_start = settings.get("window_start_time")
+    window_end = settings.get("window_end_time")
+    if not window_start or not window_end:
+        notify("Set schedule: nothing to set", "window_start_time / window_end_time not configured in Settings.")
+        return
+
+    try:
+        result = await client.save_charging_schedule(
+            vin,
+            start_charge_time=window_start,
+            end_charge_time=window_end,
+            charge_way="s",
+            enabled=True,
+        )
+        print(f"save_charging_schedule result: {result}")
+        notify(
+            "Charging schedule set",
+            f"Car's native scheduled charging set to {window_start}\u2013{window_end}, matching your configured window.",
+        )
+    except Exception as exc:
+        print(f"save_charging_schedule raised: {exc}", file=sys.stderr)
+        notify("Set schedule: command failed", f"save_charging_schedule errored: {exc}.")
+
+
 async def main() -> None:
     config = BydConfig.from_env()
     async with BydClient(config) as client:
@@ -123,6 +165,8 @@ async def main() -> None:
 
         if CONTROL_ACTION == "start":
             await attempt_start(client, vin)
+        elif CONTROL_ACTION == "set-schedule":
+            await attempt_set_schedule(client, vin)
         else:
             await attempt_stop(client, vin)
 
