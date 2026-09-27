@@ -1627,7 +1627,30 @@ function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, batte
   document.getElementById('start-charge-btn').style.display = 'none';
 }
 
-function renderIdleStatus(snapshot) {
+// Computes the recent standby (parked, not charging) drain rate in
+// %/hour, using only consecutive readings where the odometer didn't
+// move -- same isolation logic as the Standby Loss card, just over a
+// shorter recent window so it reflects current conditions (e.g. drain
+// is measurably faster at high SOC, as found when investigating this).
+async function computeRecentStandbyRate() {
+  const cutoff = new Date(Date.now() - 48 * 3600000).toISOString();
+  const rows = await sb(`vehicle_snapshots?recorded_at=gte.${encodeURIComponent(cutoff)}&select=recorded_at,battery_pct,odometer_km,is_charging&order=recorded_at.asc`);
+  let totalPctDrop = 0, totalHours = 0;
+  for (let i = 1; i < rows.length; i++) {
+    const a = rows[i - 1], b = rows[i];
+    if (a.is_charging || b.is_charging) continue;
+    if (a.odometer_km == null || b.odometer_km == null || Number(b.odometer_km) !== Number(a.odometer_km)) continue;
+    if (a.battery_pct == null || b.battery_pct == null) continue;
+    const drop = Number(a.battery_pct) - Number(b.battery_pct);
+    if (drop <= 0) continue;
+    const hours = (new Date(b.recorded_at) - new Date(a.recorded_at)) / 3600000;
+    totalPctDrop += drop;
+    totalHours += hours;
+  }
+  return totalHours > 0 ? totalPctDrop / totalHours : null;
+}
+
+function renderIdleStatus(snapshot, restartTarget) {
   const card = document.getElementById('status-card');
   card.classList.remove('charging');
   document.getElementById('status-grid').style.display = 'none';
@@ -1641,7 +1664,11 @@ function renderIdleStatus(snapshot) {
   }
   document.getElementById('status-title').textContent = t('not_charging_pct', { pct: Math.round(snapshot.battery_pct) });
   const rangeStr = snapshot.range_km != null ? t('range_suffix', { km: Math.round(snapshot.range_km) }) : '';
-  document.getElementById('status-idle-detail').textContent = `${rangeStr}${t('updated')} ${relativeTime(snapshot.recorded_at)}`;
+  let detail = `${rangeStr}${t('updated')} ${relativeTime(snapshot.recorded_at)}`;
+  if (restartTarget) {
+    detail += ` \u00b7 Resumes in ~${fmtRemaining(restartTarget)}`;
+  }
+  document.getElementById('status-idle-detail').textContent = detail;
 }
 
 async function loadLiveStatus() {
@@ -1701,8 +1728,27 @@ async function loadLiveStatus() {
 
       renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, latestPct, lastUpdated, currentPowerKw != null ? Number(currentPowerKw) : null, pctLimit, limitTarget);
     } else {
-      const latest = await sb('vehicle_snapshots?select=battery_pct,range_km,recorded_at&order=recorded_at.desc&limit=1');
-      renderIdleStatus(latest[0] || null);
+      const [latest, settingsRows] = await Promise.all([
+        sb('vehicle_snapshots?select=battery_pct,range_km,recorded_at&order=recorded_at.desc&limit=1'),
+        sb('tracker_settings?select=pct_limit_enabled,auto_stop_at_pct,restart_at_pct'),
+      ]);
+      const snapshot = latest[0] || null;
+      const settings = settingsRows[0] || {};
+
+      let restartTarget = null;
+      if (snapshot && settings.pct_limit_enabled && settings.restart_at_pct != null && settings.auto_stop_at_pct != null) {
+        const pct = Number(snapshot.battery_pct);
+        const restartPct = Number(settings.restart_at_pct);
+        // Only meaningful in the "waiting to restart" zone: stopped at
+        // or above the target, not yet down to the restart threshold.
+        if (pct >= restartPct && pct < Number(settings.auto_stop_at_pct) + 1) {
+          const rate = await computeRecentStandbyRate();
+          if (rate && rate > 0 && pct > restartPct) {
+            restartTarget = new Date(Date.now() + ((pct - restartPct) / rate) * 3600000);
+          }
+        }
+      }
+      renderIdleStatus(snapshot, restartTarget);
     }
   } catch (err) {
     console.error('live status failed', err);
