@@ -449,22 +449,62 @@ def get_poll_interval_minutes() -> int:
 FAST_CHARGE_KW_THRESHOLD = 2.0  # above this, assume public/fast charging and poll every ~1 min. Every observed home session has held steady at 1.4-1.5kW, so 2.0 gives a clean margin above that while still catching public sessions that dip lower than the original 5.0 cutoff did.
 
 
-def should_throttle(prev_snapshot: dict | None, interval_minutes: int, trigger_source: str = "normal") -> bool:
+RESTART_APPROACH_MARGIN_PCT = 2  # start polling tightly once battery is within this many points of the restart threshold
+WINDOW_APPROACH_MARGIN_MIN = 15  # start polling tightly within this many minutes of a window boundary
+
+
+def is_approaching_restart(prev_snapshot: dict, settings: dict) -> bool:
+    """True if sitting close to the restart threshold, not yet charging
+    -- lets the 1-min cron catch the actual crossing promptly rather
+    than waiting for the (possibly 60-min) idle baseline."""
+    if not settings.get("pct_limit_enabled") or bool(prev_snapshot.get("is_charging")):
+        return False
+    restart_threshold = settings.get("restart_at_pct")
+    pct = prev_snapshot.get("battery_pct")
+    if restart_threshold is None or pct is None:
+        return False
+    return float(pct) <= float(restart_threshold) + RESTART_APPROACH_MARGIN_PCT
+
+
+def is_approaching_window_boundary(settings: dict, now_local) -> bool:
+    """True if within the margin of either the window start or end
+    time -- catches both the 'should start now' and 'should stop now'
+    transitions promptly."""
+    if not settings.get("time_window_enabled"):
+        return False
+    now_min = now_local.hour * 60 + now_local.minute
+    for boundary_str in (settings.get("window_start_time") or "00:00", settings.get("window_end_time") or "06:00"):
+        try:
+            bh, bm = map(int, boundary_str.split(":"))
+        except (ValueError, AttributeError):
+            continue
+        boundary_min = bh * 60 + bm
+        diff = min((now_min - boundary_min) % 1440, (boundary_min - now_min) % 1440)
+        if diff <= WINDOW_APPROACH_MARGIN_MIN:
+            return True
+    return False
+
+
+def should_throttle(prev_snapshot: dict | None, interval_minutes: int, trigger_source: str = "normal", settings: dict | None = None) -> bool:
     """True if it's too soon to poll again.
 
-    Two crons exist: the normal one every 5 min (respects whatever
-    interval is configured in Settings, with a shortcut that never
-    throttles when that interval is <=5 min, since the cron itself
-    can't fire faster than that anyway), and a second one every 1 min
-    whose ONLY purpose is catching DC fast charging.
+    Two crons exist: the normal one (respects whatever interval is
+    configured in Settings, with a shortcut that never throttles when
+    that interval is <=5 min, since the cron itself can't fire faster
+    than that anyway), and a second one every 1 min for three specific
+    situations where prompt action matters more than the idle baseline:
+    genuine DC fast charging, approaching the restart threshold, and
+    approaching either edge of the configured time window. Outside
+    those three, it throttles (skips) every time -- it is NOT a general
+    "poll faster" cron.
 
     That 1-min cron must NEVER use the interval<=5 shortcut above --
     doing so was a real bug: with the (very common) default 5-min
     interval, every single 1-min trigger sailed through unthrottled
     regardless of charging power, polling BYD every minute even during
     normal slow AC charging. The fast cron's source is checked first
-    and handled as a completely separate rule: bypass ONLY for genuine
-    fast charging, throttle (skip) for literally everything else.
+    and handled as a completely separate rule: bypass ONLY for one of
+    the three situations above, throttle (skip) for everything else.
 
     A manual "Poll Now" always sets FORCE_POLL=true and bypasses all of
     this -- without that, pressing Poll Now while a slower interval is
@@ -482,12 +522,19 @@ def should_throttle(prev_snapshot: dict | None, interval_minutes: int, trigger_s
         and prev_power is not None
         and float(prev_power) >= FAST_CHARGE_KW_THRESHOLD
     )
+    settings = settings or {}
 
     if trigger_source == "fast":
-        # This cron exists purely to catch fast charging -- skip
-        # (throttle) for every other case, full stop. No <=5 shortcut,
-        # no normal-interval fallback.
-        return not is_fast_charging
+        # This cron exists purely for the three prompt-action cases --
+        # throttle (skip) for every other case, full stop. No <=5
+        # shortcut, no normal-interval fallback.
+        if is_fast_charging:
+            return False
+        if is_approaching_restart(prev_snapshot, settings):
+            return False
+        if is_approaching_window_boundary(settings, datetime.now(VEHICLE_TZ)):
+            return False
+        return True
 
     if is_fast_charging:
         return False
@@ -501,7 +548,8 @@ def main() -> None:
     prev_snapshot = get_last_snapshot()
     interval_minutes = get_poll_interval_minutes()
     trigger_source = os.environ.get("TRIGGER_SOURCE", "normal")
-    if should_throttle(prev_snapshot, interval_minutes, trigger_source):
+    settings = get_tracker_settings()
+    if should_throttle(prev_snapshot, interval_minutes, trigger_source, settings):
         print(f"throttled: source={trigger_source}, configured interval is {interval_minutes} min, last poll was {prev_snapshot['recorded_at']}, skipping this run")
         return
 
@@ -527,7 +575,6 @@ def main() -> None:
     if not prev_is_charging and current_is_charging:
         existing_open = get_open_session()
         if existing_open is None:
-            settings = get_tracker_settings()
             location_type = classify_location(state["latitude"], state["longitude"], settings)
             sb_insert(
                 "charging_sessions",
@@ -552,7 +599,6 @@ def main() -> None:
         if open_session is None:
             print("warning: charging stopped but no open session found, nothing to close", file=sys.stderr)
         else:
-            settings = get_tracker_settings()
             start_pct = open_session["start_pct"]
             end_pct = state["battery_pct"]
             pct_delta = (end_pct - start_pct) if (start_pct is not None and end_pct is not None) else None
@@ -638,7 +684,6 @@ def main() -> None:
     #   Neither on: no automation -- charges freely, as before this
     #       feature existed
     if state["battery_pct"] is not None:
-        settings = get_tracker_settings()
         pct_enabled = bool(settings.get("pct_limit_enabled"))
         time_enabled = bool(settings.get("time_window_enabled"))
 
