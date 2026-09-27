@@ -1809,17 +1809,21 @@ async function loadLiveStatus() {
           if (!nowInWindow) {
             // Outside the window entirely -- the real trigger is simply
             // the window opening, not a % drain projection (the window
-            // itself is now the gate, per the fix to poll.py's logic).
+            // itself is now the gate).
             restartTarget = nextOccurrenceOf(settings.window_start_time);
-          } else if (pct >= target) {
-            // Inside the window, stopped for hitting the target --
-            // matches poll.py's fixed logic: restart once under the
-            // target itself, not the lower hysteresis threshold (the
-            // window already provides the separation that threshold
-            // was for).
+          } else if (settings.restart_at_pct != null && pct >= Number(settings.restart_at_pct) && pct < target + 1) {
+            // Already inside an ongoing window (not a fresh entry --
+            // if it just opened and pct was under target, it would
+            // already be charging, not waiting). Matches poll.py's
+            // refined logic: uses the hysteresis threshold here, not
+            // the target -- confirmed live that using target for every
+            // in-window restart fragmented one overnight charge into
+            // several tiny 1%-topup sessions once standby drain ticked
+            // it back under target.
+            const restartPct = Number(settings.restart_at_pct);
             const rate = await computeRecentStandbyRate();
-            if (rate && rate > 0) {
-              restartTarget = new Date(new Date(snapshot.recorded_at).getTime() + ((pct - target + 1) / rate) * 3600000);
+            if (rate && rate > 0 && pct > restartPct) {
+              restartTarget = new Date(new Date(snapshot.recorded_at).getTime() + ((pct - restartPct) / rate) * 3600000);
             }
           }
         } else if (settings.restart_at_pct != null) {
