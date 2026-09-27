@@ -668,7 +668,7 @@ def main() -> None:
 
             over_limit = pct_enabled and threshold is not None and battery_pct >= float(threshold)
             outside_window = time_enabled and not in_window
-            under_limit = (not pct_enabled) or (restart_threshold is not None and battery_pct < float(restart_threshold))
+            under_limit = (not pct_enabled) or (restart_threshold is not None and battery_pct <= float(restart_threshold))
             should_charge_now = (not time_enabled or in_window) and under_limit
 
             if current_is_charging and (over_limit or outside_window):
