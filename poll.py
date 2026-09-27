@@ -231,12 +231,24 @@ def notify_auto_start(success: bool, pct: float, reason: str) -> None:
         print(f"warning: ntfy notification failed: {exc}", file=sys.stderr)
 
 
-async def attempt_auto_stop_async() -> None:
+async def attempt_auto_stop_async(restore_window_start: str | None = None, restore_window_end: str | None = None) -> None:
     """Same schedule-window-closed trick validated in control.py's stop
     attempt -- confirmed via live testing to actually pause charging.
     Called every poll while charging and at/above the configured
     threshold (not just once), so a single failed attempt gets retried
     on the next poll rather than silently never trying again.
+
+    The zero-width now-now schedule this trick saves OVERWRITES
+    whatever the car's own native scheduled-charging window was set to
+    -- confirmed by seeing it show up as a "21:04-21:04" single-time
+    schedule in the BYD app after a stop. Left alone, that means the
+    car's native schedule would never fire again on its own the
+    following night. If restore_window_start/end are given (i.e. the
+    time-window feature is enabled), immediately re-save the REAL
+    window right after the stop, so the native schedule is always
+    restored and ready to reliably open the window again next time --
+    genuinely more robust for that than relying purely on our own
+    poll-based auto-start.
     """
     config = BydConfig.from_env()
     async with BydClient(config) as client:
@@ -252,17 +264,37 @@ async def attempt_auto_stop_async() -> None:
             charge_way="s",
             enabled=True,
         )
+        if restore_window_start and restore_window_end:
+            await client.save_charging_schedule(
+                vin,
+                start_charge_time=restore_window_start,
+                end_charge_time=restore_window_end,
+                charge_way="s",
+                enabled=True,
+            )
 
 
-async def attempt_auto_start_async() -> None:
+async def attempt_auto_start_async(restore_window_start: str | None = None, restore_window_end: str | None = None) -> None:
     """Officially documented start_charging() call, confirmed working
     during earlier live testing (same command control.py's Start
-    Charging button uses)."""
+    Charging button uses). Also refreshes the native schedule to the
+    real configured window when given -- covers the case where it was
+    never set up correctly in the first place (e.g. right after
+    enabling the time-window feature), not just the after-a-stop
+    restoration attempt_auto_stop_async handles."""
     config = BydConfig.from_env()
     async with BydClient(config) as client:
         vehicles = await client.get_vehicles()
         vin = vehicles[0].vin
         await client.start_charging(vin)
+        if restore_window_start and restore_window_end:
+            await client.save_charging_schedule(
+                vin,
+                start_charge_time=restore_window_start,
+                end_charge_time=restore_window_end,
+                charge_way="s",
+                enabled=True,
+            )
 
 
 def time_in_window(now_local, start_str: str, end_str: str) -> bool:
@@ -734,7 +766,9 @@ def main() -> None:
                     reasons.append("outside the configured time window")
                 reason = " and ".join(reasons)
                 try:
-                    asyncio.run(attempt_auto_stop_async())
+                    restore_start = settings.get("window_start_time") if time_enabled else None
+                    restore_end = settings.get("window_end_time") if time_enabled else None
+                    asyncio.run(attempt_auto_stop_async(restore_start, restore_end))
                     print(f"auto-stop: {reason}, stop command sent")
                     notify_auto_stop(True, battery_pct, reason)
                 except Exception as exc:
@@ -749,7 +783,9 @@ def main() -> None:
                 else:
                     reason = "inside the configured time window"
                 try:
-                    asyncio.run(attempt_auto_start_async())
+                    restore_start = settings.get("window_start_time") if time_enabled else None
+                    restore_end = settings.get("window_end_time") if time_enabled else None
+                    asyncio.run(attempt_auto_start_async(restore_start, restore_end))
                     print(f"auto-start: {reason}, start command sent")
                     notify_auto_start(True, battery_pct, reason)
                 except Exception as exc:
