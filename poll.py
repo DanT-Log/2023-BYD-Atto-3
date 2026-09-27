@@ -231,6 +231,28 @@ def notify_auto_start(success: bool, pct: float, reason: str) -> None:
         print(f"warning: ntfy notification failed: {exc}", file=sys.stderr)
 
 
+def notify_schedule_sync_failed(window_start: str, window_end: str, exc: Exception) -> None:
+    """Deliberately lower priority than the stop/start notifications --
+    this means the car's own native scheduled-charging display might be
+    briefly stale, not that the actual stop or start command failed.
+    Will simply be retried on the next auto-stop or auto-start."""
+    if not NTFY_TOPIC:
+        print("notify skipped: NTFY_TOPIC is not set", file=sys.stderr)
+        return
+    title = "BYD Atto 3 \u2014 schedule sync failed (action itself still worked)"
+    message = f"Tried to sync the car's native schedule to {window_start}\u2013{window_end} but it errored: {exc}. Will retry on the next stop/start."
+    try:
+        resp = requests.post(
+            f"https://ntfy.sh/{NTFY_TOPIC}",
+            data=message.encode("utf-8"),
+            headers={"Title": title, "Priority": "low"},
+            timeout=10,
+        )
+        print(f"ntfy schedule-sync-failed notification sent: status={resp.status_code}")
+    except Exception as notify_exc:  # noqa: BLE001
+        print(f"warning: ntfy notification failed: {notify_exc}", file=sys.stderr)
+
+
 async def attempt_auto_stop_async(restore_window_start: str | None = None, restore_window_end: str | None = None) -> None:
     """Same schedule-window-closed trick validated in control.py's stop
     attempt -- confirmed via live testing to actually pause charging.
@@ -249,6 +271,14 @@ async def attempt_auto_stop_async(restore_window_start: str | None = None, resto
     restored and ready to reliably open the window again next time --
     genuinely more robust for that than relying purely on our own
     poll-based auto-start.
+
+    The restore step is wrapped in its own try/except and reported via
+    a separate notification rather than raised -- a failure there
+    (confirmed to happen: BYD's cloud can time out on this specific
+    call) does NOT mean the actual stop failed, and conflating the two
+    was misleading: earlier, a restore-only failure surfaced as "the
+    stop command errored", when the stop had genuinely worked and only
+    the secondary schedule sync hadn't.
     """
     config = BydConfig.from_env()
     async with BydClient(config) as client:
@@ -265,13 +295,17 @@ async def attempt_auto_stop_async(restore_window_start: str | None = None, resto
             enabled=True,
         )
         if restore_window_start and restore_window_end:
-            await client.save_charging_schedule(
-                vin,
-                start_charge_time=restore_window_start,
-                end_charge_time=restore_window_end,
-                charge_way="s",
-                enabled=True,
-            )
+            try:
+                await client.save_charging_schedule(
+                    vin,
+                    start_charge_time=restore_window_start,
+                    end_charge_time=restore_window_end,
+                    charge_way="s",
+                    enabled=True,
+                )
+            except Exception as exc:
+                print(f"warning: schedule restore after stop failed (stop itself still succeeded): {exc}", file=sys.stderr)
+                notify_schedule_sync_failed(restore_window_start, restore_window_end, exc)
 
 
 async def attempt_auto_start_async(restore_window_start: str | None = None, restore_window_end: str | None = None) -> None:
@@ -281,20 +315,28 @@ async def attempt_auto_start_async(restore_window_start: str | None = None, rest
     real configured window when given -- covers the case where it was
     never set up correctly in the first place (e.g. right after
     enabling the time-window feature), not just the after-a-stop
-    restoration attempt_auto_stop_async handles."""
+    restoration attempt_auto_stop_async handles.
+
+    Same separation as attempt_auto_stop_async: the restore step's
+    failure is reported on its own and does not affect whether the
+    start itself is considered to have succeeded."""
     config = BydConfig.from_env()
     async with BydClient(config) as client:
         vehicles = await client.get_vehicles()
         vin = vehicles[0].vin
         await client.start_charging(vin)
         if restore_window_start and restore_window_end:
-            await client.save_charging_schedule(
-                vin,
-                start_charge_time=restore_window_start,
-                end_charge_time=restore_window_end,
-                charge_way="s",
-                enabled=True,
-            )
+            try:
+                await client.save_charging_schedule(
+                    vin,
+                    start_charge_time=restore_window_start,
+                    end_charge_time=restore_window_end,
+                    charge_way="s",
+                    enabled=True,
+                )
+            except Exception as exc:
+                print(f"warning: schedule restore after start failed (start itself still succeeded): {exc}", file=sys.stderr)
+                notify_schedule_sync_failed(restore_window_start, restore_window_end, exc)
 
 
 def time_in_window(now_local, start_str: str, end_str: str) -> bool:
