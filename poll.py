@@ -837,15 +837,27 @@ def main() -> None:
             outside_window = time_enabled and not in_window
             # The restart hysteresis gap (75% vs 80%) exists purely to
             # prevent rapid stop/start cycling when % is the ONLY gate.
-            # Once a time window is ALSO enabled, the window itself
-            # already provides that separation -- it structurally can't
-            # restart before the window opens regardless of %. Requiring
-            # it to ALSO wait for the lower restart threshold at that
-            # point is unnecessary and wrong: sitting at 77% right when
-            # the window opens should start immediately (under the 80%
-            # target), not keep waiting for a drop to 75% that the
-            # window's own gating already made redundant.
-            if time_enabled:
+            # Right when the window FIRST opens, that gap is
+            # unnecessary -- the window itself just provided the
+            # separation, so sitting at 77% should start immediately
+            # rather than waiting for a drop to 75% that already
+            # happened structurally. But once already inside an
+            # ongoing window (charged to target, drained 1% from
+            # standby loss), the window ISN'T providing fresh
+            # separation anymore -- confirmed live: without the gap
+            # here, a tiny standby drain immediately re-triggered a
+            # 1%-topup restart, fragmenting one overnight charge into
+            # several tiny sessions. So: use the target only on a
+            # genuine transition INTO the window (previous snapshot
+            # was outside it); use the normal hysteresis gap for any
+            # restart while already inside an ongoing window period.
+            prev_in_window = time_enabled and prev_snapshot is not None and time_in_window(
+                parse_ts(prev_snapshot["recorded_at"]).astimezone(VEHICLE_TZ),
+                settings.get("window_start_time") or "00:00",
+                settings.get("window_end_time") or "06:00",
+            )
+            just_entered_window = time_enabled and in_window and not prev_in_window
+            if just_entered_window:
                 under_limit = (not pct_enabled) or (threshold is not None and battery_pct < float(threshold))
             else:
                 under_limit = (not pct_enabled) or (restart_threshold is not None and battery_pct <= float(restart_threshold))
