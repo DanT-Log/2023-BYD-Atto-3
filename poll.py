@@ -723,8 +723,9 @@ def main() -> None:
     #                       leaving it
     #   Both on: stop if (over % OR outside window), start if (inside
     #       window AND under %)
-    #   Neither on: no automation -- charges freely, as before this
-    #       feature existed
+    #   Neither on: no limit, no window -- if plugged in and idle,
+    #       just start (nothing should be holding it back; matches
+    #       normal EV behaviour with no smart charging at all)
     if state["battery_pct"] is not None:
         pct_enabled = bool(settings.get("pct_limit_enabled"))
         time_enabled = bool(settings.get("time_window_enabled"))
@@ -791,6 +792,24 @@ def main() -> None:
                 except Exception as exc:
                     print(f"auto-start: command failed: {exc}", file=sys.stderr)
                     notify_auto_start(False, battery_pct, reason)
+
+        elif not current_is_charging and state.get("connect_state") not in (None, 0, "0"):
+            # Neither toggle on: no limit, no window -- nothing should be
+            # holding the car back, so plugged-in + idle should just
+            # charge, matching how the car would behave with no smart
+            # charging at all. Without this, removing a limit that had
+            # previously stopped the car (e.g. raising/disabling the %
+            # cap) would leave it sitting there indefinitely, silently
+            # requiring a manual Start press -- defeating the entire
+            # point of having just removed the restriction.
+            battery_pct = float(state["battery_pct"])
+            try:
+                asyncio.run(attempt_auto_start_async())
+                print("auto-start: no limit or window configured, plugged in and idle, start command sent")
+                notify_auto_start(True, battery_pct, "no limit or window configured")
+            except Exception as exc:
+                print(f"auto-start: command failed: {exc}", file=sys.stderr)
+                notify_auto_start(False, battery_pct, "no limit or window configured")
 
 
 if __name__ == "__main__":
