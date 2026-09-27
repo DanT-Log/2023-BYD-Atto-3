@@ -449,7 +449,7 @@ def get_poll_interval_minutes() -> int:
 FAST_CHARGE_KW_THRESHOLD = 2.0  # above this, assume public/fast charging and poll every ~1 min. Every observed home session has held steady at 1.4-1.5kW, so 2.0 gives a clean margin above that while still catching public sessions that dip lower than the original 5.0 cutoff did.
 
 
-RESTART_APPROACH_MARGIN_PCT = 2  # start polling tightly once battery is within this many points of the restart threshold
+PCT_APPROACH_MARGIN = 2  # start polling tightly once within this many points of either the stop or restart threshold
 WINDOW_APPROACH_MARGIN_MIN = 15  # start polling tightly within this many minutes of a window boundary
 
 
@@ -463,7 +463,25 @@ def is_approaching_restart(prev_snapshot: dict, settings: dict) -> bool:
     pct = prev_snapshot.get("battery_pct")
     if restart_threshold is None or pct is None:
         return False
-    return float(pct) <= float(restart_threshold) + RESTART_APPROACH_MARGIN_PCT
+    return float(pct) <= float(restart_threshold) + PCT_APPROACH_MARGIN
+
+
+def is_approaching_stop(prev_snapshot: dict, settings: dict) -> bool:
+    """Symmetric counterpart to is_approaching_restart -- while
+    actively charging (normal home-charging speed, not fast enough to
+    already be caught by the fast-charge check), catch the approach to
+    the STOP threshold promptly too. Without this, a charge climbing
+    back up at ~1.4-1.5kW toward the limit would only get checked on
+    the slow idle-baseline cadence, risking overshooting the target by
+    up to that whole interval before being caught -- defeating the
+    precision the hysteresis gap was built for."""
+    if not settings.get("pct_limit_enabled") or not bool(prev_snapshot.get("is_charging")):
+        return False
+    stop_threshold = settings.get("auto_stop_at_pct")
+    pct = prev_snapshot.get("battery_pct")
+    if stop_threshold is None or pct is None:
+        return False
+    return float(pct) >= float(stop_threshold) - PCT_APPROACH_MARGIN
 
 
 def is_approaching_window_boundary(settings: dict, now_local) -> bool:
@@ -491,11 +509,14 @@ def should_throttle(prev_snapshot: dict | None, interval_minutes: int, trigger_s
     Two crons exist: the normal one (respects whatever interval is
     configured in Settings, with a shortcut that never throttles when
     that interval is <=5 min, since the cron itself can't fire faster
-    than that anyway), and a second one every 1 min for three specific
+    than that anyway), and a second one every 1 min for four specific
     situations where prompt action matters more than the idle baseline:
-    genuine DC fast charging, approaching the restart threshold, and
+    genuine DC fast charging, approaching the restart threshold,
+    approaching the stop threshold while charging (the symmetric
+    counterpart -- catches a normal-speed charge climbing back toward
+    the limit, which fast-charge detection alone wouldn't), and
     approaching either edge of the configured time window. Outside
-    those three, it throttles (skips) every time -- it is NOT a general
+    those four, it throttles (skips) every time -- it is NOT a general
     "poll faster" cron.
 
     That 1-min cron must NEVER use the interval<=5 shortcut above --
@@ -504,7 +525,7 @@ def should_throttle(prev_snapshot: dict | None, interval_minutes: int, trigger_s
     regardless of charging power, polling BYD every minute even during
     normal slow AC charging. The fast cron's source is checked first
     and handled as a completely separate rule: bypass ONLY for one of
-    the three situations above, throttle (skip) for everything else.
+    the four situations above, throttle (skip) for everything else.
 
     A manual "Poll Now" always sets FORCE_POLL=true and bypasses all of
     this -- without that, pressing Poll Now while a slower interval is
@@ -531,6 +552,8 @@ def should_throttle(prev_snapshot: dict | None, interval_minutes: int, trigger_s
         if is_fast_charging:
             return False
         if is_approaching_restart(prev_snapshot, settings):
+            return False
+        if is_approaching_stop(prev_snapshot, settings):
             return False
         if is_approaching_window_boundary(settings, datetime.now(VEHICLE_TZ)):
             return False
