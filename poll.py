@@ -560,6 +560,36 @@ def is_approaching_window_boundary(settings: dict, now_local) -> bool:
     return False
 
 
+def snapshot_plugged_in(snapshot: dict) -> bool:
+    """Whether the last known reading had the cable connected, from the
+    connect_state stored in the raw charging blob. Verified against
+    history: every charging snapshot has connect_state=1 and it is
+    never charging while 0, so it is a reliable signal. If it's
+    missing entirely, assume plugged in -- the safe direction, since
+    wrongly assuming unplugged could skip a start that should happen."""
+    try:
+        cs = snapshot["raw"]["charging"]["connect_state"]
+    except (KeyError, TypeError):
+        return True
+    return cs not in (None, 0, "0")
+
+
+def is_just_after_window_start(settings: dict, now_local, minutes: int = 2) -> bool:
+    """True for the first couple of minutes after the window opens.
+    When nothing is plugged in there's nothing to start or stop, so
+    the tight every-minute boundary polling is pure waste -- but one
+    quick check right as the window opens is still worthwhile, to
+    catch a car that was plugged in shortly before it."""
+    if not settings.get("time_window_enabled"):
+        return False
+    try:
+        bh, bm = map(int, (settings.get("window_start_time") or "00:00").split(":"))
+    except (ValueError, AttributeError):
+        return False
+    now_min = now_local.hour * 60 + now_local.minute
+    return 0 <= (now_min - (bh * 60 + bm)) % 1440 <= minutes
+
+
 def should_throttle(prev_snapshot: dict | None, interval_minutes: int, trigger_source: str = "normal", settings: dict | None = None) -> bool:
     """True if it's too soon to poll again.
 
@@ -608,10 +638,17 @@ def should_throttle(prev_snapshot: dict | None, interval_minutes: int, trigger_s
         # shortcut, no normal-interval fallback.
         if is_fast_charging:
             return False
-        if is_approaching_restart(prev_snapshot, settings):
-            return False
-        if is_approaching_window_boundary(settings, datetime.now(VEHICLE_TZ)):
-            return False
+        if snapshot_plugged_in(prev_snapshot):
+            if is_approaching_restart(prev_snapshot, settings):
+                return False
+            if is_approaching_window_boundary(settings, datetime.now(VEHICLE_TZ)):
+                return False
+        else:
+            # Not plugged in: no start or stop is possible, so skip
+            # the tight boundary/restart polling entirely -- except a
+            # brief check just after the window opens.
+            if is_just_after_window_start(settings, datetime.now(VEHICLE_TZ)):
+                return False
         return True
 
     if is_fast_charging:
