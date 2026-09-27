@@ -1662,7 +1662,7 @@ function renderChargingStatus(session, energyKwh, costSoFar, fullByTarget, batte
       </div>
     </div>
   `;
-  document.getElementById('stop-attempt-btn').style.display = 'block';
+  document.getElementById('stop-attempt-btn').style.display = appUnlocked ? 'block' : 'none';
   document.getElementById('start-charge-btn').style.display = 'none';
   document.getElementById('charge-for-row').style.display = 'none';
 }
@@ -1695,8 +1695,8 @@ function renderIdleStatus(snapshot, restartTarget) {
   card.classList.remove('charging');
   document.getElementById('status-grid').style.display = 'none';
   document.getElementById('stop-attempt-btn').style.display = 'none';
-  document.getElementById('start-charge-btn').style.display = 'block';
-  document.getElementById('charge-for-row').style.display = 'flex';
+  document.getElementById('start-charge-btn').style.display = appUnlocked ? 'block' : 'none';
+  document.getElementById('charge-for-row').style.display = appUnlocked ? 'flex' : 'none';
 
   if (!snapshot) {
     document.getElementById('status-title').textContent = t('not_charging');
