@@ -40,7 +40,7 @@ import math
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import requests
@@ -524,7 +524,6 @@ FAST_CHARGE_KW_THRESHOLD = 2.0  # above this, assume public/fast charging and po
 
 
 PCT_APPROACH_MARGIN = 2  # start polling tightly once within this many points of either the stop or restart threshold
-WINDOW_APPROACH_MARGIN_MIN = 15  # start polling tightly within this many minutes of a window boundary
 
 
 def is_approaching_restart(prev_snapshot: dict, settings: dict) -> bool:
@@ -541,25 +540,6 @@ def is_approaching_restart(prev_snapshot: dict, settings: dict) -> bool:
 
 
 
-def is_approaching_window_boundary(settings: dict, now_local) -> bool:
-    """True if within the margin of either the window start or end
-    time -- catches both the 'should start now' and 'should stop now'
-    transitions promptly."""
-    if not settings.get("time_window_enabled"):
-        return False
-    now_min = now_local.hour * 60 + now_local.minute
-    for boundary_str in (settings.get("window_start_time") or "00:00", settings.get("window_end_time") or "06:00"):
-        try:
-            bh, bm = map(int, boundary_str.split(":"))
-        except (ValueError, AttributeError):
-            continue
-        boundary_min = bh * 60 + bm
-        diff = min((now_min - boundary_min) % 1440, (boundary_min - now_min) % 1440)
-        if diff <= WINDOW_APPROACH_MARGIN_MIN:
-            return True
-    return False
-
-
 def snapshot_plugged_in(snapshot: dict) -> bool:
     """Whether the last known reading had the cable connected, from the
     connect_state stored in the raw charging blob. Verified against
@@ -574,20 +554,56 @@ def snapshot_plugged_in(snapshot: dict) -> bool:
     return cs not in (None, 0, "0")
 
 
-def is_just_after_window_start(settings: dict, now_local, minutes: int = 2) -> bool:
-    """True for the first couple of minutes after the window opens.
-    When nothing is plugged in there's nothing to start or stop, so
-    the tight every-minute boundary polling is pure waste -- but one
-    quick check right as the window opens is still worthwhile, to
-    catch a car that was plugged in shortly before it."""
+BOUNDARY_SLOT_MINUTES = 2  # checks fire at the boundary itself, and again this many minutes later
+
+
+def boundary_check_due(prev_snapshot: dict, settings: dict, now_local, plugged_in: bool) -> bool:
+    """Two checks per window edge: one AT the boundary (to act) and one
+    a couple of minutes later (to confirm it took effect / retry if
+    not). Replaces a blunt +/-15-minute margin that polled every minute
+    for ~30 minutes around each edge (~60 BYD logins a day) for no
+    added benefit.
+
+    Each check is a "slot" that fires at most once: allowed only if the
+    last snapshot predates the slot's start. That way a cron tick
+    dispatched a few seconds late (poll.py evaluates the clock when it
+    RUNS, not when it was triggered) still lands inside its slot
+    instead of missing it, and two ticks inside one slot can't both
+    poll.
+
+    Unplugged: there's nothing to start or stop, so only the first
+    check after the window OPENS is kept (catches a car plugged in
+    shortly beforehand); the end-of-window edge and the confirmation
+    checks are skipped."""
     if not settings.get("time_window_enabled"):
         return False
     try:
-        bh, bm = map(int, (settings.get("window_start_time") or "00:00").split(":"))
-    except (ValueError, AttributeError):
+        prev_dt = parse_ts(prev_snapshot["recorded_at"])
+    except (KeyError, TypeError, ValueError):
         return False
-    now_min = now_local.hour * 60 + now_local.minute
-    return 0 <= (now_min - (bh * 60 + bm)) % 1440 <= minutes
+
+    edges = [settings.get("window_start_time") or "00:00"]
+    if plugged_in:
+        edges.append(settings.get("window_end_time") or "06:00")
+
+    for edge_str in edges:
+        try:
+            eh, em = map(int, edge_str.split(":"))
+        except (ValueError, AttributeError):
+            continue
+        edge = now_local.replace(hour=eh, minute=em, second=0, microsecond=0)
+        if edge > now_local:
+            edge -= timedelta(days=1)
+        minutes_since = (now_local - edge).total_seconds() / 60
+        if not (0 <= minutes_since < 2 * BOUNDARY_SLOT_MINUTES):
+            continue
+        slot = int(minutes_since // BOUNDARY_SLOT_MINUTES)
+        if not plugged_in and slot > 0:
+            continue
+        slot_start = edge + timedelta(minutes=slot * BOUNDARY_SLOT_MINUTES)
+        if prev_dt < slot_start:
+            return True
+    return False
 
 
 def should_throttle(prev_snapshot: dict | None, interval_minutes: int, trigger_source: str = "normal", settings: dict | None = None) -> bool:
@@ -601,8 +617,8 @@ def should_throttle(prev_snapshot: dict | None, interval_minutes: int, trigger_s
     reasonably current. A second cron every 1 min exists purely for
     three situations needing even tighter polling than that 5-min
     charging floor: genuine DC fast charging, approaching the restart
-    threshold while idle, and approaching either edge of the configured
-    time window. Outside those three, the 1-min cron throttles (skips)
+    threshold while idle, and two brief checks at each edge of the
+    configured time window (at the edge, and 2 minutes later). Outside those three, the 1-min cron throttles (skips)
     every time -- it is NOT a general "poll faster" cron.
 
     That 1-min cron must NEVER use the <=5 shortcut used elsewhere in
@@ -638,17 +654,11 @@ def should_throttle(prev_snapshot: dict | None, interval_minutes: int, trigger_s
         # shortcut, no normal-interval fallback.
         if is_fast_charging:
             return False
-        if snapshot_plugged_in(prev_snapshot):
-            if is_approaching_restart(prev_snapshot, settings):
-                return False
-            if is_approaching_window_boundary(settings, datetime.now(VEHICLE_TZ)):
-                return False
-        else:
-            # Not plugged in: no start or stop is possible, so skip
-            # the tight boundary/restart polling entirely -- except a
-            # brief check just after the window opens.
-            if is_just_after_window_start(settings, datetime.now(VEHICLE_TZ)):
-                return False
+        plugged_in = snapshot_plugged_in(prev_snapshot)
+        if plugged_in and is_approaching_restart(prev_snapshot, settings):
+            return False
+        if boundary_check_due(prev_snapshot, settings, datetime.now(VEHICLE_TZ), plugged_in):
+            return False
         return True
 
     if is_fast_charging:
