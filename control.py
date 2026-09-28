@@ -24,11 +24,12 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import requests
 from pybyd import BydClient, BydConfig
+from scheduler import reset_time_after_stop
 
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC")
 CONTROL_ACTION = os.environ.get("CONTROL_ACTION", "stop")
@@ -40,7 +41,7 @@ SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 
 def get_tracker_settings() -> dict:
     resp = requests.get(
-        f"{SUPABASE_URL}/rest/v1/tracker_settings?select=window_start_time,window_end_time",
+        f"{SUPABASE_URL}/rest/v1/tracker_settings?select=window_start_time,window_end_time,time_window_enabled",
         headers={"apikey": SUPABASE_SERVICE_KEY, "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}"},
         timeout=15,
     )
@@ -67,14 +68,7 @@ def notify(title: str, message: str) -> None:
         print(f"warning: ntfy notification failed: {exc}", file=sys.stderr)
 
 
-def clear_manual_charge_override() -> None:
-    """Manual Stop should always win -- if a 'Charge Now For X' override
-    is still active (future manual_charge_until), leaving it in place
-    would mean poll.py's automation sees 'override active, not
-    charging, plugged in' on the very next poll and silently restarts
-    it, undoing this manual stop within minutes. Cleared unconditionally
-    whenever Stop is pressed, regardless of whether an override was
-    actually active or the stop command itself succeeds."""
+def patch_settings(updates: dict) -> None:
     try:
         resp = requests.patch(
             f"{SUPABASE_URL}/rest/v1/tracker_settings?id=eq.true",
@@ -83,13 +77,37 @@ def clear_manual_charge_override() -> None:
                 "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
                 "Content-Type": "application/json",
             },
-            json={"manual_charge_until": None},
+            json=updates,
             timeout=15,
         )
         resp.raise_for_status()
-        print("cleared manual_charge_until (if any was set)")
     except Exception as exc:
-        print(f"warning: failed to clear manual_charge_until: {exc}", file=sys.stderr)
+        print(f"warning: failed to update tracker_settings {list(updates)}: {exc}", file=sys.stderr)
+
+
+def review_soon() -> dict:
+    """A manual start/stop should be followed by a quick check that it
+    took effect, exactly like an automatic one."""
+    return {"next_poll_at": (datetime.now(timezone.utc) + timedelta(minutes=2)).isoformat(),
+            "next_poll_reason": "reviewing manual command"}
+
+
+def clear_manual_charge_override() -> None:
+    """Manual Stop should always win -- if a 'Charge Now For X' override
+    is still active, leaving it would mean the automation sees 'override
+    active, not charging, plugged in' and silently restarts it. Also
+    queues the car-schedule restore, since the stop trick overwrites the
+    car's own schedule with a zero-width one, and asks for a quick
+    review poll."""
+    updates = {"manual_charge_until": None, **review_soon()}
+    try:
+        reset_at = reset_time_after_stop(datetime.now(timezone.utc), get_tracker_settings())
+        if reset_at is not None:
+            updates["schedule_reset_at"] = reset_at.isoformat()
+    except Exception as exc:
+        print(f"warning: could not queue schedule restore: {exc}", file=sys.stderr)
+    patch_settings(updates)
+    print("cleared manual_charge_until, queued schedule restore + review")
 
 
 async def attempt_stop(client: BydClient, vin: str) -> None:
@@ -137,6 +155,7 @@ async def attempt_stop(client: BydClient, vin: str) -> None:
 
 
 async def attempt_start(client: BydClient, vin: str) -> None:
+    patch_settings(review_soon())
     before = await client.get_charging_status(vin)
     print(f"charging state before start attempt: {before.charging_state}, soc={before.soc}")
 
@@ -172,6 +191,7 @@ async def attempt_set_schedule(client: BydClient, vin: str) -> None:
             enabled=True,
         )
         print(f"save_charging_schedule result: {result}")
+        patch_settings({"schedule_reset_at": None})
         notify(
             "Charging schedule set",
             f"Car's native scheduled charging set to {window_start}\u2013{window_end}, matching your configured window.",

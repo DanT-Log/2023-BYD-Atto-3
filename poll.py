@@ -46,6 +46,7 @@ from zoneinfo import ZoneInfo
 import requests
 from pybyd import BydClient, BydConfig
 from pybyd.models.realtime import ChargingState
+from scheduler import poll_step
 
 SUPABASE_URL = os.environ["SUPABASE_URL"].rstrip("/")
 SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
@@ -253,108 +254,62 @@ def notify_schedule_sync_failed(window_start: str, window_end: str, exc: Excepti
         print(f"warning: ntfy notification failed: {notify_exc}", file=sys.stderr)
 
 
-async def attempt_auto_stop_async(restore_window_start: str | None = None, restore_window_end: str | None = None) -> None:
-    """Same schedule-window-closed trick validated in control.py's stop
-    attempt -- confirmed via live testing to actually pause charging.
-    Called every poll while charging and at/above the configured
-    threshold (not just once), so a single failed attempt gets retried
-    on the next poll rather than silently never trying again.
-
-    The zero-width now-now schedule this trick saves OVERWRITES
-    whatever the car's own native scheduled-charging window was set to
-    -- confirmed by seeing it show up as a "21:04-21:04" single-time
-    schedule in the BYD app after a stop. Left alone, that means the
-    car's native schedule would never fire again on its own the
-    following night. If restore_window_start/end are given (i.e. the
-    time-window feature is enabled), immediately re-save the REAL
-    window right after the stop, so the native schedule is always
-    restored and ready to reliably open the window again next time --
-    genuinely more robust for that than relying purely on our own
-    poll-based auto-start.
-
-    The restore step is wrapped in its own try/except and reported via
-    a separate notification rather than raised -- a failure there
-    (confirmed to happen: BYD's cloud can time out on this specific
-    call) does NOT mean the actual stop failed, and conflating the two
-    was misleading: earlier, a restore-only failure surfaced as "the
-    stop command errored", when the stop had genuinely worked and only
-    the secondary schedule sync hadn't.
-    """
+async def attempt_auto_stop_async() -> None:
+    """Stop charging via the schedule-window-closed trick (a zero-width
+    now-now schedule) -- confirmed live to actually pause charging. It
+    OVERWRITES the car's own native schedule; scheduler.py queues a
+    restore (schedule_reset_at) for a safe moment afterwards."""
     config = BydConfig.from_env()
     async with BydClient(config) as client:
         vehicles = await client.get_vehicles()
         vin = vehicles[0].vin
         now_local = datetime.now(VEHICLE_TZ)
-        end_time_str = now_local.strftime("%H:%M")
-        start_time_str = now_local.replace(second=0, microsecond=0).strftime("%H:%M")
         await client.save_charging_schedule(
             vin,
-            start_charge_time=start_time_str,
-            end_charge_time=end_time_str,
+            start_charge_time=now_local.replace(second=0, microsecond=0).strftime("%H:%M"),
+            end_charge_time=now_local.strftime("%H:%M"),
             charge_way="s",
             enabled=True,
         )
-        if restore_window_start and restore_window_end:
-            try:
-                await client.save_charging_schedule(
-                    vin,
-                    start_charge_time=restore_window_start,
-                    end_charge_time=restore_window_end,
-                    charge_way="s",
-                    enabled=True,
-                )
-            except Exception as exc:
-                print(f"warning: schedule restore after stop failed (stop itself still succeeded): {exc}", file=sys.stderr)
-                notify_schedule_sync_failed(restore_window_start, restore_window_end, exc)
 
 
-async def attempt_auto_start_async(restore_window_start: str | None = None, restore_window_end: str | None = None) -> None:
-    """Officially documented start_charging() call, confirmed working
-    during earlier live testing (same command control.py's Start
-    Charging button uses). Also refreshes the native schedule to the
-    real configured window when given -- covers the case where it was
-    never set up correctly in the first place (e.g. right after
-    enabling the time-window feature), not just the after-a-stop
-    restoration attempt_auto_stop_async handles.
-
-    Same separation as attempt_auto_stop_async: the restore step's
-    failure is reported on its own and does not affect whether the
-    start itself is considered to have succeeded."""
+async def attempt_auto_start_async() -> None:
+    """Officially documented start_charging() -- confirmed working, and
+    unaffected by whatever schedule the car currently holds."""
     config = BydConfig.from_env()
     async with BydClient(config) as client:
         vehicles = await client.get_vehicles()
-        vin = vehicles[0].vin
-        await client.start_charging(vin)
-        if restore_window_start and restore_window_end:
-            try:
-                await client.save_charging_schedule(
-                    vin,
-                    start_charge_time=restore_window_start,
-                    end_charge_time=restore_window_end,
-                    charge_way="s",
-                    enabled=True,
-                )
-            except Exception as exc:
-                print(f"warning: schedule restore after start failed (start itself still succeeded): {exc}", file=sys.stderr)
-                notify_schedule_sync_failed(restore_window_start, restore_window_end, exc)
+        await client.start_charging(vehicles[0].vin)
 
 
-def time_in_window(now_local, start_str: str, end_str: str) -> bool:
-    """Handles a window that wraps past midnight (e.g. 22:00-06:00),
-    not just start<end same-day windows."""
+async def restore_schedule_async(window_start: str, window_end: str) -> None:
+    """Put the car's own scheduled-charging window back to the configured
+    one. Separate from stop/start on purpose: BYD's cloud can time out on
+    this specific call, and that must never look like the stop failed."""
+    config = BydConfig.from_env()
+    async with BydClient(config) as client:
+        vehicles = await client.get_vehicles()
+        await client.save_charging_schedule(
+            vehicles[0].vin,
+            start_charge_time=window_start,
+            end_charge_time=window_end,
+            charge_way="s",
+            enabled=True,
+        )
+
+
+def notify_gave_up(action: str, pct: float | None, attempts: int) -> None:
+    if not NTFY_TOPIC:
+        return
     try:
-        sh, sm = map(int, start_str.split(":"))
-        eh, em = map(int, end_str.split(":"))
-    except (ValueError, AttributeError):
-        return False
-    start_min = sh * 60 + sm
-    end_min = eh * 60 + em
-    now_min = now_local.hour * 60 + now_local.minute
-    if start_min == end_min:
-        return True  # zero-width window treated as always-on
-    if start_min < end_min:
-        return start_min <= now_min < end_min
-    return now_min >= start_min or now_min < end_min
+        requests.post(
+            f"https://ntfy.sh/{NTFY_TOPIC}",
+            data=f"Sent {attempts} {action} commands and the car still hasn't responded (battery {pct}%). Pausing retries for a while \u2014 check the car/charger.".encode("utf-8"),
+            headers={"Title": f"BYD Atto 3 \u2014 {action} not taking effect", "Priority": "high"},
+            timeout=10,
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f"warning: ntfy notification failed: {exc}", file=sys.stderr)
 
 
 def notify_charge_started(location_type: str, start_pct: float | None) -> None:
@@ -520,169 +475,37 @@ def get_poll_interval_minutes() -> int:
         return 5
 
 
-FAST_CHARGE_KW_THRESHOLD = 2.0  # above this, assume public/fast charging and poll every ~1 min. Every observed home session has held steady at 1.4-1.5kW, so 2.0 gives a clean margin above that while still catching public sessions that dip lower than the original 5.0 cutoff did.
-
-
-PCT_APPROACH_MARGIN = 2  # start polling tightly once within this many points of either the stop or restart threshold
-
-
-def is_approaching_restart(prev_snapshot: dict, settings: dict) -> bool:
-    """True if sitting close to the restart threshold, not yet charging
-    -- lets the 1-min cron catch the actual crossing promptly rather
-    than waiting for the (possibly 60-min) idle baseline."""
-    if not settings.get("pct_limit_enabled") or bool(prev_snapshot.get("is_charging")):
-        return False
-    restart_threshold = settings.get("restart_at_pct")
-    pct = prev_snapshot.get("battery_pct")
-    if restart_threshold is None or pct is None:
-        return False
-    return float(pct) <= float(restart_threshold) + PCT_APPROACH_MARGIN
-
-
-
-def snapshot_plugged_in(snapshot: dict) -> bool:
-    """Whether the last known reading had the cable connected, from the
-    connect_state stored in the raw charging blob. Verified against
-    history: every charging snapshot has connect_state=1 and it is
-    never charging while 0, so it is a reliable signal. If it's
-    missing entirely, assume plugged in -- the safe direction, since
-    wrongly assuming unplugged could skip a start that should happen."""
-    try:
-        cs = snapshot["raw"]["charging"]["connect_state"]
-    except (KeyError, TypeError):
-        return True
-    return cs not in (None, 0, "0")
-
-
-BOUNDARY_SLOT_MINUTES = 2  # checks fire at the boundary itself, and again this many minutes later
-
-
-def boundary_check_due(prev_snapshot: dict, settings: dict, now_local, plugged_in: bool) -> bool:
-    """Two checks per window edge: one AT the boundary (to act) and one
-    a couple of minutes later (to confirm it took effect / retry if
-    not). Replaces a blunt +/-15-minute margin that polled every minute
-    for ~30 minutes around each edge (~60 BYD logins a day) for no
-    added benefit.
-
-    Each check is a "slot" that fires at most once: allowed only if the
-    last snapshot predates the slot's start. That way a cron tick
-    dispatched a few seconds late (poll.py evaluates the clock when it
-    RUNS, not when it was triggered) still lands inside its slot
-    instead of missing it, and two ticks inside one slot can't both
-    poll.
-
-    Unplugged: there's nothing to start or stop, so only the first
-    check after the window OPENS is kept (catches a car plugged in
-    shortly beforehand); the end-of-window edge and the confirmation
-    checks are skipped."""
-    if not settings.get("time_window_enabled"):
-        return False
-    try:
-        prev_dt = parse_ts(prev_snapshot["recorded_at"])
-    except (KeyError, TypeError, ValueError):
-        return False
-
-    edges = [settings.get("window_start_time") or "00:00"]
-    if plugged_in:
-        edges.append(settings.get("window_end_time") or "06:00")
-
-    for edge_str in edges:
-        try:
-            eh, em = map(int, edge_str.split(":"))
-        except (ValueError, AttributeError):
+def recent_standby_rate() -> float | None:
+    """%/hour lost while parked (odometer unchanged, not charging) over
+    the last 48h -- same isolation as the dashboard's Standby Loss."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
+    rows = sb_get("vehicle_snapshots", {
+        "recorded_at": f"gte.{cutoff}",
+        "select": "recorded_at,battery_pct,odometer_km,is_charging",
+        "order": "recorded_at.asc",
+    })
+    drop_total = hours_total = 0.0
+    for a, b in zip(rows, rows[1:]):
+        if a["is_charging"] or b["is_charging"]:
             continue
-        edge = now_local.replace(hour=eh, minute=em, second=0, microsecond=0)
-        if edge > now_local:
-            edge -= timedelta(days=1)
-        minutes_since = (now_local - edge).total_seconds() / 60
-        if not (0 <= minutes_since < 2 * BOUNDARY_SLOT_MINUTES):
+        if None in (a["odometer_km"], b["odometer_km"], a["battery_pct"], b["battery_pct"]):
             continue
-        slot = int(minutes_since // BOUNDARY_SLOT_MINUTES)
-        if not plugged_in and slot > 0:
+        if float(b["odometer_km"]) != float(a["odometer_km"]):
             continue
-        slot_start = edge + timedelta(minutes=slot * BOUNDARY_SLOT_MINUTES)
-        if prev_dt < slot_start:
-            return True
-    return False
-
-
-def should_throttle(prev_snapshot: dict | None, interval_minutes: int, trigger_source: str = "normal", settings: dict | None = None) -> bool:
-    """True if it's too soon to poll again.
-
-    Two crons exist. The normal one respects whatever interval is
-    configured in Settings, BUT while actively charging (even normal
-    "granny" home speed) it's effectively capped at 5 min regardless of
-    the configured idle baseline -- charging is exactly the state where
-    the stop threshold, cost-so-far, and time-to-limit all need to stay
-    reasonably current. A second cron every 1 min exists purely for
-    three situations needing even tighter polling than that 5-min
-    charging floor: genuine DC fast charging, approaching the restart
-    threshold while idle, and two brief checks at each edge of the
-    configured time window (at the edge, and 2 minutes later). Outside those three, the 1-min cron throttles (skips)
-    every time -- it is NOT a general "poll faster" cron.
-
-    That 1-min cron must NEVER use the <=5 shortcut used elsewhere in
-    this function -- doing so was a real bug: with the (very common)
-    default 5-min interval, every single 1-min trigger sailed through
-    unthrottled regardless of charging power, polling BYD every minute
-    even during normal slow AC charging. The fast cron's source is
-    checked first and handled as a completely separate rule: bypass
-    ONLY for one of the three situations above, throttle (skip) for
-    everything else.
-
-    A manual "Poll Now" always sets FORCE_POLL=true and bypasses all of
-    this -- without that, pressing Poll Now while a slower interval is
-    configured would silently do nothing, defeating the point of a
-    manual override.
-    """
-    if os.environ.get("FORCE_POLL") == "true":
-        return False
-    if prev_snapshot is None:
-        return False
-
-    prev_power = prev_snapshot.get("charging_power_kw")
-    is_fast_charging = (
-        bool(prev_snapshot.get("is_charging"))
-        and prev_power is not None
-        and float(prev_power) >= FAST_CHARGE_KW_THRESHOLD
-    )
-    settings = settings or {}
-
-    if trigger_source == "fast":
-        # This cron exists purely for the prompt-action cases --
-        # throttle (skip) for every other case, full stop. No <=5
-        # shortcut, no normal-interval fallback.
-        if is_fast_charging:
-            return False
-        plugged_in = snapshot_plugged_in(prev_snapshot)
-        if plugged_in and is_approaching_restart(prev_snapshot, settings):
-            return False
-        if boundary_check_due(prev_snapshot, settings, datetime.now(VEHICLE_TZ), plugged_in):
-            return False
-        return True
-
-    if is_fast_charging:
-        return False
-    # While charging at all (even normal "granny" home speed, not just
-    # fast), cap the effective interval at 5 min regardless of the
-    # configured idle baseline -- charging is exactly the state where
-    # the stop threshold, cost-so-far, and time-to-limit all need to
-    # stay reasonably current, not just near the boundary.
-    effective_interval = min(interval_minutes, 5) if bool(prev_snapshot.get("is_charging")) else interval_minutes
-    if effective_interval <= 5:
-        return False
-    elapsed_min = (datetime.now(timezone.utc) - parse_ts(prev_snapshot["recorded_at"])).total_seconds() / 60
-    return elapsed_min < effective_interval
+        drop = float(a["battery_pct"]) - float(b["battery_pct"])
+        if drop <= 0:
+            continue
+        drop_total += drop
+        hours_total += (parse_ts(b["recorded_at"]) - parse_ts(a["recorded_at"])).total_seconds() / 3600
+    return drop_total / hours_total if hours_total > 0 else None
 
 
 def main() -> None:
+    # No throttle here any more: a poll only runs when the scheduler says
+    # it is due (pg_cron poll_tick) or someone forced it. What to do next,
+    # and when to poll again, is decided in scheduler.py.
     prev_snapshot = get_last_snapshot()
-    interval_minutes = get_poll_interval_minutes()
-    trigger_source = os.environ.get("TRIGGER_SOURCE", "normal")
     settings = get_tracker_settings()
-    if should_throttle(prev_snapshot, interval_minutes, trigger_source, settings):
-        print(f"throttled: source={trigger_source}, configured interval is {interval_minutes} min, last poll was {prev_snapshot['recorded_at']}, skipping this run")
-        return
 
     state = asyncio.run(fetch_vehicle_state())
     now = datetime.now(timezone.utc).isoformat()
@@ -802,165 +625,78 @@ def main() -> None:
     # effect immediately (BYD's cloud has a 1-2 min propagation delay,
     # confirmed during earlier testing) gets retried on the next poll
     # instead of silently giving up after one attempt.
-    # Manual "charge now for X" override: a self-clearing timer that
-    # takes priority over the % limit / time window automation below
-    # while active. Set by the dashboard as an absolute UTC timestamp
-    # (manual_charge_until) -- while now < that time, force charging on
-    # regardless of any configured limit or window; once elapsed, stop
-    # and clear the field so it doesn't keep re-firing.
-    manual_override_active = False
-    manual_until_str = settings.get("manual_charge_until")
-    if manual_until_str and state["battery_pct"] is not None:
-        manual_until_dt = parse_ts(manual_until_str)
-        now_utc = datetime.now(timezone.utc)
-        battery_pct = float(state["battery_pct"])
-        if now_utc < manual_until_dt:
-            manual_override_active = True
-            is_plugged_in = state.get("connect_state") not in (None, 0, "0")
-            if not current_is_charging and is_plugged_in:
-                try:
-                    asyncio.run(attempt_auto_start_async())
-                    print(f"manual charge override: active until {manual_until_str}, start command sent")
-                    notify_auto_start(True, battery_pct, f"manual charge-now override active until {manual_until_str}")
-                except Exception as exc:
-                    print(f"manual override start failed: {exc}", file=sys.stderr)
-                    notify_auto_start(False, battery_pct, "manual charge-now override")
-        else:
-            if current_is_charging:
-                try:
-                    asyncio.run(attempt_auto_stop_async())
-                    print("manual charge override: duration elapsed, stop command sent")
-                    notify_auto_stop(True, battery_pct, "manual charge-now duration elapsed")
-                except Exception as exc:
-                    print(f"manual override stop failed: {exc}", file=sys.stderr)
-                    notify_auto_stop(False, battery_pct, "manual charge-now duration elapsed")
-            try:
-                sb_patch("tracker_settings", "true", {"manual_charge_until": None})
-            except Exception as exc:
-                print(f"failed to clear manual_charge_until: {exc}", file=sys.stderr)
+    # ---- charge automation + when to poll next (all logic in scheduler.py) ----
+    def _ts(v):
+        return parse_ts(v) if v else None
 
-    # Charge automation: two independent toggles.
-    #   pct_limit_enabled:  maintain battery <= auto_stop_at_pct, ANY time
-    #                       (stops at the limit, auto-starts anytime it
-    #                       drops back under, if plugged in)
-    #   time_window_enabled: confine charging to window_start_time -
-    #                       window_end_time, up to 100% (no % cap of its
-    #                       own) -- starts entering the window, stops
-    #                       leaving it
-    #   Both on: stop if (over % OR outside window), start if (inside
-    #       window AND under %)
-    #   Neither on: no limit, no window -- if plugged in and idle,
-    #       just start (nothing should be holding it back; matches
-    #       normal EV behaviour with no smart charging at all)
-    if not manual_override_active and state["battery_pct"] is not None:
-        pct_enabled = bool(settings.get("pct_limit_enabled"))
-        time_enabled = bool(settings.get("time_window_enabled"))
+    now_dt = parse_ts(now)
+    step_settings = dict(settings)
+    step_settings["manual_charge_until"] = _ts(settings.get("manual_charge_until"))
+    ctl = {
+        "last_command": settings.get("last_command"),
+        "last_command_at": _ts(settings.get("last_command_at")),
+        "command_attempts": settings.get("command_attempts") or 0,
+        "schedule_reset_at": _ts(settings.get("schedule_reset_at")),
+    }
+    step_state = {
+        "is_charging": current_is_charging,
+        "battery_pct": state["battery_pct"],
+        "charging_power_kw": state.get("charging_power_kw"),
+        "plugged": state.get("connect_state") not in (None, 0, "0"),
+    }
 
-        if pct_enabled or time_enabled:
-            threshold = settings.get("auto_stop_at_pct")
-            # Hysteresis: restart only once battery drops to this LOWER
-            # threshold, not just under the stop threshold itself.
-            # Without this gap, a battery reading hovering right at the
-            # stop threshold (measurement noise, a sliver of standby
-            # drain) could trigger rapid stop/start cycling -- repeated
-            # BYD API commands, notification spam, and needless wear on
-            # the charging contactor. Falls back to the stop threshold
-            # itself (no gap) only if restart_at_pct was never set, for
-            # backward compatibility with settings saved before this
-            # existed.
-            restart_threshold = settings.get("restart_at_pct")
-            if restart_threshold is None:
-                restart_threshold = threshold
-            battery_pct = float(state["battery_pct"])
-            now_local = datetime.now(VEHICLE_TZ)
-            in_window = time_enabled and time_in_window(
-                now_local,
-                settings.get("window_start_time") or "00:00",
-                settings.get("window_end_time") or "06:00",
-            )
-            is_plugged_in = state.get("connect_state") not in (None, 0, "0")
+    def send_command(action: str) -> bool:
+        try:
+            asyncio.run(attempt_auto_start_async() if action == "start" else attempt_auto_stop_async())
+            print(f"auto-{action}: command sent")
+            return True
+        except Exception as exc:  # noqa: BLE001
+            print(f"auto-{action}: command failed: {exc}", file=sys.stderr)
+            return False
 
-            over_limit = pct_enabled and threshold is not None and battery_pct >= float(threshold)
-            outside_window = time_enabled and not in_window
-            # The restart hysteresis gap (75% vs 80%) exists purely to
-            # prevent rapid stop/start cycling when % is the ONLY gate.
-            # Right when the window FIRST opens, that gap is
-            # unnecessary -- the window itself just provided the
-            # separation, so sitting at 77% should start immediately
-            # rather than waiting for a drop to 75% that already
-            # happened structurally. But once already inside an
-            # ongoing window (charged to target, drained 1% from
-            # standby loss), the window ISN'T providing fresh
-            # separation anymore -- confirmed live: without the gap
-            # here, a tiny standby drain immediately re-triggered a
-            # 1%-topup restart, fragmenting one overnight charge into
-            # several tiny sessions. So: use the target only on a
-            # genuine transition INTO the window (previous snapshot
-            # was outside it); use the normal hysteresis gap for any
-            # restart while already inside an ongoing window period.
-            prev_in_window = time_enabled and prev_snapshot is not None and time_in_window(
-                parse_ts(prev_snapshot["recorded_at"]).astimezone(VEHICLE_TZ),
-                settings.get("window_start_time") or "00:00",
-                settings.get("window_end_time") or "06:00",
-            )
-            just_entered_window = time_enabled and in_window and not prev_in_window
-            if just_entered_window:
-                under_limit = (not pct_enabled) or (threshold is not None and battery_pct < float(threshold))
-            else:
-                under_limit = (not pct_enabled) or (restart_threshold is not None and battery_pct <= float(restart_threshold))
-            should_charge_now = (not time_enabled or in_window) and under_limit
+    def restore_schedule(window_start: str, window_end: str) -> bool:
+        try:
+            asyncio.run(restore_schedule_async(window_start, window_end))
+            print(f"car schedule restored to {window_start}-{window_end}")
+            return True
+        except Exception as exc:  # noqa: BLE001
+            print(f"schedule restore failed: {exc}", file=sys.stderr)
+            return False
 
-            if current_is_charging and (over_limit or outside_window):
-                reasons = []
-                if over_limit:
-                    reasons.append(f"battery {battery_pct}% >= {threshold}% limit")
-                if outside_window:
-                    reasons.append("outside the configured time window")
-                reason = " and ".join(reasons)
-                try:
-                    restore_start = settings.get("window_start_time") if time_enabled else None
-                    restore_end = settings.get("window_end_time") if time_enabled else None
-                    asyncio.run(attempt_auto_stop_async(restore_start, restore_end))
-                    print(f"auto-stop: {reason}, stop command sent")
-                    notify_auto_stop(True, battery_pct, reason)
-                except Exception as exc:
-                    print(f"auto-stop: command failed: {exc}", file=sys.stderr)
-                    notify_auto_stop(False, battery_pct, reason)
+    def notify(kind: str, **info) -> None:
+        if kind == "command":
+            fn = notify_auto_start if info["action"] == "start" else notify_auto_stop
+            fn(info["ok"], info["pct"], info["reason"])
+        elif kind == "gave_up":
+            notify_gave_up(info["action"], info["pct"], info["attempts"])
+        elif kind == "schedule_sync_failed":
+            notify_schedule_sync_failed(info["start"], info["end"], RuntimeError("BYD did not confirm the change"))
 
-            elif not current_is_charging and is_plugged_in and should_charge_now:
-                if pct_enabled and time_enabled:
-                    reason = f"under {restart_threshold}% and inside the configured time window"
-                elif pct_enabled:
-                    reason = f"under {restart_threshold}% restart threshold"
-                else:
-                    reason = "inside the configured time window"
-                try:
-                    restore_start = settings.get("window_start_time") if time_enabled else None
-                    restore_end = settings.get("window_end_time") if time_enabled else None
-                    asyncio.run(attempt_auto_start_async(restore_start, restore_end))
-                    print(f"auto-start: {reason}, start command sent")
-                    notify_auto_start(True, battery_pct, reason)
-                except Exception as exc:
-                    print(f"auto-start: command failed: {exc}", file=sys.stderr)
-                    notify_auto_start(False, battery_pct, reason)
+    result = poll_step(
+        now=now_dt,
+        state=step_state,
+        settings=step_settings,
+        ctl=ctl,
+        prev_recorded_at=_ts(prev_snapshot["recorded_at"]) if prev_snapshot else None,
+        standby_rate_fn=recent_standby_rate,
+        send_command=send_command,
+        restore_schedule=restore_schedule,
+        notify=notify,
+    )
 
-        elif not current_is_charging and state.get("connect_state") not in (None, 0, "0"):
-            # Neither toggle on: no limit, no window -- nothing should be
-            # holding the car back, so plugged-in + idle should just
-            # charge, matching how the car would behave with no smart
-            # charging at all. Without this, removing a limit that had
-            # previously stopped the car (e.g. raising/disabling the %
-            # cap) would leave it sitting there indefinitely, silently
-            # requiring a manual Start press -- defeating the entire
-            # point of having just removed the restriction.
-            battery_pct = float(state["battery_pct"])
-            try:
-                asyncio.run(attempt_auto_start_async())
-                print("auto-start: no limit or window configured, plugged in and idle, start command sent")
-                notify_auto_start(True, battery_pct, "no limit or window configured")
-            except Exception as exc:
-                print(f"auto-start: command failed: {exc}", file=sys.stderr)
-                notify_auto_start(False, battery_pct, "no limit or window configured")
+    new_ctl = result["ctl"]
+    updates = {
+        "next_poll_at": result["next_poll_at"].isoformat(),
+        "next_poll_reason": result["reason"],
+        "last_command": new_ctl.get("last_command"),
+        "last_command_at": new_ctl["last_command_at"].isoformat() if new_ctl.get("last_command_at") else None,
+        "command_attempts": new_ctl.get("command_attempts") or 0,
+        "schedule_reset_at": new_ctl["schedule_reset_at"].isoformat() if new_ctl.get("schedule_reset_at") else None,
+    }
+    if result["clear_override"]:
+        updates["manual_charge_until"] = None
+    sb_patch("tracker_settings", "true", updates)
+    print(f"next poll: {updates['next_poll_at']} ({result['reason']})")
 
 
 if __name__ == "__main__":
