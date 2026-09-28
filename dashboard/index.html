@@ -953,6 +953,7 @@
           <div class="row"><span class="k">Doors &amp; Windows</span><span class="v" id="vehicle-security">—</span></div>
           <div class="row"><span class="k">Plugged in</span><span class="v" id="vehicle-plugged-in">—</span></div>
           <div class="row" id="vehicle-charge-window-row" style="display:none;"><span class="k">Charging window</span><span class="v" id="vehicle-charge-window">—</span></div>
+          <div class="row"><span class="k">Next check</span><span class="v" id="vehicle-next-check">—</span></div>
         </div>
       </div>
 
@@ -2406,7 +2407,7 @@ async function renderVehicleInfo() {
   try {
     const [rows, settingsRows] = await Promise.all([
       sb('vehicle_snapshots?select=raw&order=recorded_at.desc&limit=1'),
-      sb('tracker_settings?select=time_window_enabled,window_start_time,window_end_time'),
+      sb('tracker_settings?select=time_window_enabled,window_start_time,window_end_time,next_poll_at,next_poll_reason'),
     ]);
     const rt = rows[0]?.raw?.realtime;
     const chargingRaw = rows[0]?.raw?.charging;
@@ -2430,6 +2431,13 @@ async function renderVehicleInfo() {
       document.getElementById('vehicle-charge-window').textContent = `${settings.window_start_time} \u2013 ${settings.window_end_time}`;
     } else {
       windowRow.style.display = 'none';
+    }
+
+    const nextEl = document.getElementById('vehicle-next-check');
+    if (settings.next_poll_at) {
+      nextEl.textContent = `${fmtFullByDate(new Date(settings.next_poll_at))} \u00b7 ${settings.next_poll_reason || ''}`;
+    } else {
+      nextEl.textContent = '\u2014';
     }
 
     if (!rt) return;
