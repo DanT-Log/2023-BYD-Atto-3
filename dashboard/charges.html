@@ -202,7 +202,7 @@ function sessionRow(s) {
       <div class="avatar ${isHome ? '' : 'public'}">${isHome ? ICON_HOME : ICON_PUBLIC}</div>
       <div class="session-mid">
         <div class="session-title">${s.start_pct != null && s.end_pct != null ? `${s.start_pct}% → ${s.end_pct}%` : fmtDate(s.started_at)}</div>
-        <div class="session-sub">${fmtDate(s.started_at)}, ${timeRange} · ${fmtKwh(s.energy_added_kwh)}</div>
+        <div class="session-sub">${fmtDate(s.started_at)}, ${timeRange} · ${fmtKwh(s.energy_added_kwh)}${s.kwh_drawn != null ? ` (${fmtKwh(s.kwh_drawn)} drawn)` : ''}</div>
       </div>
       <div class="session-amt">
         <div class="cost">${fmtMoney(s.cost)}</div>
