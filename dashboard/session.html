@@ -425,6 +425,19 @@ function render(s) {
       </div>
     </div>
 
+    ${s.charger_id != null ? `
+    <div class="group">
+      <div class="group-header">Charger</div>
+      <div class="group-card">
+        <div class="row"><span class="k">Charger used</span><span class="v">${s.charger_name || '—'}</span></div>
+        <div class="row"><span class="k">Energy delivered (DC)</span><span class="v">${fmtKwh(s.energy_added_kwh)}</span></div>
+        <div class="row"><span class="k">Energy drawn (AC)</span><span class="v">${s.kwh_drawn != null ? fmtKwh(s.kwh_drawn) : '—'}</span></div>
+        <div class="row"><span class="k">Charger efficiency</span><span class="v">${s.charge_efficiency != null ? `${(s.charge_efficiency * 100).toFixed(0)}%` : '—'}</span></div>
+      </div>
+      <div style="font-size:12px; color:var(--text-secondary); padding:8px 16px 0; line-height:1.4;">This is AC-to-DC conversion loss at the charger, not the driving efficiency below \u2014 cost is calculated on energy drawn (AC), since that's what the meter actually bills.</div>
+    </div>
+    ` : ''}
+
     <div class="group" id="efficiency-section" style="display:none;">
       <div class="group-header">Efficiency</div>
       <div class="group-card">
