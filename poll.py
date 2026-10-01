@@ -530,16 +530,34 @@ def main() -> None:
         existing_open = get_open_session()
         if existing_open is None:
             location_type = classify_location(state["latitude"], state["longitude"], settings)
+            # Odometers only ever increase. A reading at or below the
+            # last known value (confirmed to happen: BYD's telemetry
+            # returned 0 for total_mileage on the very first poll right
+            # as the midnight auto-start fired, stuck sessions with 0 as
+            # start_odometer_km) is bad data, not a real value -- fall
+            # back to the last known good reading rather than storing
+            # something that makes km_since_last_charge wildly negative.
+            start_odo = state["odometer_km"]
+            prev_odo = prev_snapshot.get("odometer_km") if prev_snapshot else None
+            if prev_odo is not None and (start_odo is None or float(start_odo) < float(prev_odo)):
+                print(f"warning: odometer reading {start_odo} is implausible (last known: {prev_odo}), using last known value instead", file=sys.stderr)
+                start_odo = prev_odo
+
+            charger_id = None
+            if location_type == "home":
+                default_chargers = sb_get("chargers", {"is_default": "eq.true", "select": "id", "limit": "1"})
+                charger_id = default_chargers[0]["id"] if default_chargers else None
             sb_insert(
                 "charging_sessions",
                 {
                     "started_at": now,
                     "start_pct": state["battery_pct"],
-                    "start_odometer_km": state["odometer_km"],
+                    "start_odometer_km": start_odo,
                     "start_range_km": state["range_km"],
                     "start_latitude": state["latitude"],
                     "start_longitude": state["longitude"],
                     "location_type": location_type,
+                    "charger_id": charger_id,
                 },
             )
             print(f"charging session opened ({location_type})")
@@ -587,27 +605,59 @@ def main() -> None:
                 electricity_rate = settings.get("home_rate_per_kwh")  # last-resort fallback
                 rate_confirmed = False
 
+            # Wall-side (AC) energy for home sessions with a resolved
+            # charger: charger.draw_kw x duration. AC draw is flat for
+            # the whole session (observed consistently -- no ramp/taper
+            # like DC fast charging), so this simple form holds up. Cost
+            # is billed on this when available (the generated `cost`
+            # column falls back to energy_added_kwh otherwise) since
+            # that's what the meter actually charges for, not what
+            # reaches the battery after onboard-charger conversion loss.
+            kwh_drawn = None
+            charge_efficiency = None
+            charger_id = open_session.get("charger_id")
+            if location_type == "home" and charger_id and energy_added_kwh is not None:
+                chargers = sb_get("chargers", {"id": f"eq.{charger_id}", "select": "draw_kw", "limit": "1"})
+                if chargers and chargers[0].get("draw_kw") is not None:
+                    duration_hours = (parse_ts(now) - parse_ts(open_session["started_at"])).total_seconds() / 3600
+                    kwh_drawn = float(chargers[0]["draw_kw"]) * duration_hours
+                    if kwh_drawn > 0:
+                        charge_efficiency = energy_added_kwh / kwh_drawn
+
+            # Same odometer sanity check as session-open: never let a
+            # reading below the last known value (bad telemetry, not a
+            # real odometer decrease) get stored.
+            end_odo = state["odometer_km"]
+            prev_odo_close = prev_snapshot.get("odometer_km") if prev_snapshot else None
+            if prev_odo_close is not None and (end_odo is None or float(end_odo) < float(prev_odo_close)):
+                print(f"warning: odometer reading {end_odo} is implausible (last known: {prev_odo_close}), using last known value instead", file=sys.stderr)
+                end_odo = prev_odo_close
+
             sb_patch(
                 "charging_sessions",
                 open_session["id"],
                 {
                     "ended_at": now,
                     "end_pct": end_pct,
-                    "end_odometer_km": state["odometer_km"],
+                    "end_odometer_km": end_odo,
                     "end_range_km": end_range_km,
                     "range_added_km": range_added_km,
                     "energy_added_kwh": energy_added_kwh,
                     "electricity_rate": electricity_rate,
                     "km_since_last_charge": km_since_last_charge,
                     "rate_confirmed": rate_confirmed,
+                    "kwh_drawn": kwh_drawn,
+                    "charge_efficiency": charge_efficiency,
                 },
             )
             print(
                 f"charging session closed: {pct_delta}% added, "
                 f"{energy_added_kwh} kWh @ {location_type} rate ({estimate_method})"
+                + (f", {kwh_drawn:.2f} kWh drawn, {charge_efficiency:.0%} efficiency" if kwh_drawn is not None else "")
             )
 
-            cost = energy_added_kwh * electricity_rate if (energy_added_kwh is not None and electricity_rate is not None) else None
+            cost = (kwh_drawn if kwh_drawn is not None else energy_added_kwh)
+            cost = cost * electricity_rate if (cost is not None and electricity_rate is not None) else None
             notify_charge_finished(
                 location_type=location_type,
                 start_pct=start_pct,
