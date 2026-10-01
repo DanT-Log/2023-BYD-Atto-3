@@ -253,29 +253,25 @@
   }
   .period-nav{
     display: flex;
-    align-items: center;
     justify-content: center;
-    gap: 16px;
     margin: -2px 0 12px;
   }
-  .period-nav button{
+  .period-nav select{
     border: none;
-    background: transparent;
-    color: var(--blue);
-    font-size: 20px;
-    font-weight: 600;
-    padding: 2px 10px;
-    cursor: pointer;
-    line-height: 1;
-  }
-  .period-nav button:disabled{ opacity: 0.25; cursor: default; }
-  .period-nav button:active:not(:disabled){ opacity: 0.5; }
-  #period-nav-label{
+    background: var(--segment-track);
+    color: var(--text);
+    font-family: inherit;
     font-size: 13px;
     font-weight: 590;
-    color: var(--text-secondary);
-    min-width: 140px;
+    padding: 6px 28px 6px 12px;
+    border-radius: 8px;
     text-align: center;
+    text-align-last: center;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238E8E93' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
   }
 
   /* Grouped list, iOS Settings-style */
@@ -1024,9 +1020,7 @@
           <button data-period="all" data-i18n="all">All</button>
         </div>
         <div class="period-nav" id="period-nav" style="display:none;">
-          <button id="period-nav-prev" aria-label="Previous">‹</button>
-          <span id="period-nav-label"></span>
-          <button id="period-nav-next" aria-label="Next">›</button>
+          <select id="period-nav-select"></select>
         </div>
         <div class="group-card">
           <div class="row"><span class="k" data-i18n="total_energy_added">Total energy added</span><span class="v" id="total-kwh">—</span></div>
@@ -1598,9 +1592,31 @@ function applyPeriod() {
     nav.style.display = 'none';
   } else {
     nav.style.display = 'flex';
-    document.getElementById('period-nav-label').textContent = periodLabel(activePeriod, periodOffset, since);
-    document.getElementById('period-nav-next').disabled = periodOffset === 0;
+    buildPeriodOptions(activePeriod);
   }
+}
+
+// Which offsets actually have charging data, plus the current period
+// (offset 0) even if empty, so there's always a way back to "now".
+function computeOffset(period, date, now) {
+  if (period === 'daily') return Math.round((startOfDay(now) - startOfDay(date)) / 86400000);
+  if (period === 'weekly') return Math.round((startOfWeek(now) - startOfWeek(date)) / (7 * 86400000));
+  if (period === 'monthly') return (now.getFullYear() * 12 + now.getMonth()) - (date.getFullYear() * 12 + date.getMonth());
+  return 0;
+}
+
+function buildPeriodOptions(period) {
+  const now = new Date();
+  const offsets = new Set([0]);
+  allSessions.forEach(s => offsets.add(computeOffset(period, new Date(s.started_at), now)));
+  const sorted = [...offsets].filter(o => o >= 0).sort((a, b) => a - b);
+
+  const select = document.getElementById('period-nav-select');
+  select.innerHTML = sorted.map(off => {
+    const { start } = periodBounds(period, off);
+    return `<option value="${off}">${periodLabel(period, off, start)}</option>`;
+  }).join('');
+  select.value = periodOffset;
 }
 
 function renderSessions(sessions) {
@@ -2651,13 +2667,8 @@ document.getElementById('period-tabs').addEventListener('click', (e) => {
   applyPeriod();
 });
 
-document.getElementById('period-nav-prev').addEventListener('click', () => {
-  periodOffset += 1;
-  applyPeriod();
-});
-document.getElementById('period-nav-next').addEventListener('click', () => {
-  if (periodOffset === 0) return; // can't go into the future
-  periodOffset -= 1;
+document.getElementById('period-nav-select').addEventListener('change', (e) => {
+  periodOffset = parseInt(e.target.value, 10) || 0;
   applyPeriod();
 });
 
