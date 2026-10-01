@@ -152,18 +152,22 @@ def plan_next(now: datetime, *, state: dict, settings: dict, ctl: dict,
     time_enabled = bool(settings.get("time_window_enabled"))
     threshold = settings.get("auto_stop_at_pct")
     restart = settings.get("restart_at_pct")
-    interval = max(1, int(settings.get("poll_interval_minutes") or 5))
+    raw_interval = settings.get("poll_interval_minutes")
+    interval = max(0, int(raw_interval)) if raw_interval is not None else 5
     ws = settings.get("window_start_time") or "00:00"
     we = settings.get("window_end_time") or "06:00"
 
     cands: list[tuple[datetime, str]] = []
 
-    # Safety-net cadence.
+    # Safety-net cadence. interval=0 means "pause idle polling" -- it
+    # must NOT also collapse the charging-cadence cap below, or the car
+    # would get polled every single minute while charging normally,
+    # the opposite of what pausing idle polling is for.
     if charging:
         fast = power is not None and power >= FAST_CHARGE_KW_THRESHOLD
-        gap = FAST_CHARGING_INTERVAL_MIN if fast else min(CHARGING_INTERVAL_MIN, interval)
+        gap = FAST_CHARGING_INTERVAL_MIN if fast else min(CHARGING_INTERVAL_MIN, interval or CHARGING_INTERVAL_MIN)
         cands.append((now + timedelta(minutes=gap), "fast charging" if fast else "charging"))
-    else:
+    elif interval > 0:
         cands.append((now + timedelta(minutes=interval), "idle interval"))
 
     if override_until and override_until > now:
@@ -193,6 +197,14 @@ def plan_next(now: datetime, *, state: dict, settings: dict, ctl: dict,
         if rate > 0:
             cands.append((now + timedelta(hours=(pct - float(restart)) / rate),
                           f"predicted {float(restart):g}%"))
+
+    if not cands:
+        # interval=0 with nothing else scheduled (no automation feature
+        # enabled, not charging, no override, no pending reset) -- truly
+        # nothing to wake up for. Poll once a week as a safety net so a
+        # change made elsewhere (e.g. the car plugged in) isn't missed
+        # forever, rather than crashing or polling at some tiny default.
+        cands.append((now + timedelta(days=7), "paused -- weekly safety check"))
 
     when, why = min(cands, key=lambda c: c[0])
     floor = now + MIN_GAP

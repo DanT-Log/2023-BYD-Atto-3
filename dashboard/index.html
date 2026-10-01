@@ -1159,7 +1159,7 @@
         <div class="group">
           <div class="group-header" data-i18n="polling_header">Polling</div>
           <div class="group-card">
-            <div class="settings-row"><label data-i18n="poll_interval">Poll interval (minutes)</label><input type="number" step="1" min="5" max="60" id="s-poll-interval"></div>
+            <div class="settings-row"><label data-i18n="poll_interval">Poll interval (minutes, 0 = pause idle polling)</label><input type="number" step="1" min="0" max="1440" id="s-poll-interval"></div>
           </div>
         </div>
         <div class="group">
@@ -1264,7 +1264,7 @@ const TRANSLATIONS = {
     rates_header: "Rates", home_rate: "Home rate ($/kWh)", public_rate: "Public rate default ($/kWh)",
     vehicle_header: "Vehicle", battery_capacity: "Battery capacity (kWh)",
     home_detection_header: "Home Detection", home_radius: "Home radius (metres)",
-    polling_header: "Polling", poll_interval: "Poll interval (minutes)",
+    polling_header: "Polling", poll_interval: "Poll interval (minutes, 0 = pause idle polling)",
     auto_stop_header: "Charge Automation", auto_stop_pct: "Target %", restart_pct: "Restart at %",
     pct_limit_toggle: "Limit charge to a %", time_window_toggle: "Only charge during set times",
     window_start_label: "Window start", window_end_label: "Window end",
@@ -1374,7 +1374,7 @@ const TRANSLATIONS = {
     rates_header: "Gi\u00e1 \u0111i\u1ec7n", home_rate: "Gi\u00e1 t\u1ea1i nh\u00e0 ($/kWh)", public_rate: "Gi\u00e1 c\u00f4ng c\u1ed9ng m\u1eb7c \u0111\u1ecbnh ($/kWh)",
     vehicle_header: "Xe", battery_capacity: "Dung l\u01b0\u1ee3ng pin (kWh)",
     home_detection_header: "Nh\u1eadn di\u1ec7n v\u1ecb tr\u00ed nh\u00e0", home_radius: "B\u00e1n k\u00ednh nh\u00e0 (m\u00e9t)",
-    polling_header: "T\u1ea7n su\u1ea5t ki\u1ec3m tra", poll_interval: "T\u1ea7n su\u1ea5t ki\u1ec3m tra (ph\u00fat)",
+    polling_header: "T\u1ea7n su\u1ea5t ki\u1ec3m tra", poll_interval: "T\u1ea7n su\u1ea5t ki\u1ec3m tra (ph\u00fat, 0 = t\u1ea1m d\u1eebng ki\u1ec3m tra khi r\u1ea3nh)",
     auto_stop_header: "T\u1ef1 \u0111\u1ed9ng s\u1ea1c", auto_stop_pct: "% m\u1ee5c ti\u00eau", restart_pct: "Kh\u1edfi \u0111\u1ed9ng l\u1ea1i \u1edf %",
     pct_limit_toggle: "Gi\u1edbi h\u1ea1n s\u1ea1c theo %", time_window_toggle: "Ch\u1ec9 s\u1ea1c trong khung gi\u1edd \u0111\u00e3 \u0111\u1eb7t",
     window_start_label: "B\u1eaft \u0111\u1ea7u", window_end_label: "K\u1ebft th\u00fac",
