@@ -251,6 +251,32 @@
     background: var(--card);
     box-shadow: 0 1px 2px rgba(0,0,0,0.08);
   }
+  .period-nav{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin: -2px 0 12px;
+  }
+  .period-nav button{
+    border: none;
+    background: transparent;
+    color: var(--blue);
+    font-size: 20px;
+    font-weight: 600;
+    padding: 2px 10px;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .period-nav button:disabled{ opacity: 0.25; cursor: default; }
+  .period-nav button:active:not(:disabled){ opacity: 0.5; }
+  #period-nav-label{
+    font-size: 13px;
+    font-weight: 590;
+    color: var(--text-secondary);
+    min-width: 140px;
+    text-align: center;
+  }
 
   /* Grouped list, iOS Settings-style */
   .group{ margin-top: 24px; }
@@ -997,6 +1023,11 @@
           <button data-period="monthly" data-i18n="monthly">Monthly</button>
           <button data-period="all" data-i18n="all">All</button>
         </div>
+        <div class="period-nav" id="period-nav" style="display:none;">
+          <button id="period-nav-prev" aria-label="Previous">‹</button>
+          <span id="period-nav-label"></span>
+          <button id="period-nav-next" aria-label="Next">›</button>
+        </div>
         <div class="group-card">
           <div class="row"><span class="k" data-i18n="total_energy_added">Total energy added</span><span class="v" id="total-kwh">—</span></div>
           <div class="row"><span class="k" data-i18n="km_tracked">Km tracked between charges</span><span class="v" id="total-km">—</span></div>
@@ -1204,6 +1235,7 @@ const TRANSLATIONS = {
     energy_side_label: "Energy",
     overview_header: "Overview",
     daily: "Daily", weekly: "Weekly", monthly: "Monthly", all: "All",
+    today: "Today", yesterday: "Yesterday", this_week: "This week", this_month: "This month",
     total_energy_added: "Total energy added",
     km_tracked: "Km tracked between charges",
     avg_per_km: "Avg cost / km",
@@ -1313,6 +1345,7 @@ const TRANSLATIONS = {
     energy_side_label: "N\u0103ng l\u01b0\u1ee3ng",
     overview_header: "T\u1ed5ng quan",
     daily: "H\u00e0ng ng\u00e0y", weekly: "H\u00e0ng tu\u1ea7n", monthly: "H\u00e0ng th\u00e1ng", all: "T\u1ea5t c\u1ea3",
+    today: "H\u00f4m nay", yesterday: "H\u00f4m qua", this_week: "Tu\u1ea7n n\u00e0y", this_month: "Th\u00e1ng n\u00e0y",
     total_energy_added: "T\u1ed5ng n\u0103ng l\u01b0\u1ee3ng \u0111\u00e3 n\u1ea1p",
     km_tracked: "S\u1ed1 km gi\u1eefa c\u00e1c l\u1ea7n s\u1ea1c",
     avg_per_km: "Chi ph\u00ed TB / km",
@@ -1459,12 +1492,47 @@ function startOfWeek(d) {
 }
 function startOfMonth(d) { const x = startOfDay(d); x.setDate(1); return x; }
 
-function periodStart(period) {
+let periodOffset = 0; // 0 = current period, 1 = one back, etc. Reset whenever the Daily/Weekly/Monthly/All tab changes.
+
+function periodBounds(period, offset) {
   const now = new Date();
-  if (period === 'daily') return startOfDay(now);
-  if (period === 'weekly') return startOfWeek(now);
-  if (period === 'monthly') return startOfMonth(now);
-  return new Date(0); // all time
+  if (period === 'daily') {
+    const start = startOfDay(now);
+    start.setDate(start.getDate() - offset);
+    const end = new Date(start); end.setDate(end.getDate() + 1);
+    return { start, end };
+  }
+  if (period === 'weekly') {
+    const start = startOfWeek(now);
+    start.setDate(start.getDate() - offset * 7);
+    const end = new Date(start); end.setDate(end.getDate() + 7);
+    return { start, end };
+  }
+  if (period === 'monthly') {
+    const start = startOfMonth(now);
+    start.setMonth(start.getMonth() - offset); // calendar-correct, not 30-day blocks
+    const end = new Date(start); end.setMonth(end.getMonth() + 1);
+    return { start, end };
+  }
+  return { start: new Date(0), end: new Date(Date.now() + 86400000) }; // all time
+}
+
+function periodLabel(period, offset, start) {
+  if (period === 'all') return '';
+  if (offset === 0) return { daily: t('today') || 'Today', weekly: t('this_week') || 'This week', monthly: t('this_month') || 'This month' }[period];
+  if (period === 'daily') {
+    if (offset === 1) return t('yesterday') || 'Yesterday';
+    return start.toLocaleDateString(localeStr(), { day: 'numeric', month: 'short' });
+  }
+  if (period === 'weekly') {
+    const end = new Date(start); end.setDate(end.getDate() + 6);
+    return `${start.toLocaleDateString(localeStr(), { day: 'numeric', month: 'short' })} \u2013 ${end.toLocaleDateString(localeStr(), { day: 'numeric', month: 'short' })}`;
+  }
+  return start.toLocaleDateString(localeStr(), { month: 'long', year: 'numeric' });
+}
+
+function periodStart(period) {
+  return periodBounds(period, period === 'all' ? 0 : periodOffset).start;
 }
 
 // How much of a session's actual duration falls within [rangeStart, rangeEnd] --
@@ -1515,15 +1583,24 @@ function renderSummary(summary) {
 }
 
 function applyPeriod() {
-  const since = periodStart(activePeriod);
-  const now = new Date();
-  const overlapping = allSessions.filter(s => sessionOverlapFraction(s, since, now) > 0);
-  renderSummary(computeSummary(overlapping, since, now));
+  const { start: since, end: until } = periodBounds(activePeriod, activePeriod === 'all' ? 0 : periodOffset);
+  const rangeEnd = until < new Date() ? until : new Date(); // never look into the future
+  const overlapping = allSessions.filter(s => sessionOverlapFraction(s, since, rangeEnd) > 0);
+  renderSummary(computeSummary(overlapping, since, rangeEnd));
   renderSpendChart(activePeriod);
 
   document.querySelectorAll('#period-tabs button').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.period === activePeriod);
   });
+
+  const nav = document.getElementById('period-nav');
+  if (activePeriod === 'all') {
+    nav.style.display = 'none';
+  } else {
+    nav.style.display = 'flex';
+    document.getElementById('period-nav-label').textContent = periodLabel(activePeriod, periodOffset, since);
+    document.getElementById('period-nav-next').disabled = periodOffset === 0;
+  }
 }
 
 function renderSessions(sessions) {
@@ -1893,16 +1970,17 @@ function renderSpendChart(period) {
     }));
   } else {
     let start, numDays;
+    const offset = periodOffset;
     if (period === 'daily') {
       start = startOfDay(now);
-      start.setDate(start.getDate() - 6); // last 7 days including today
+      start.setDate(start.getDate() - offset - 6); // 7-day trailing window ending on the selected day
       numDays = 7;
     } else if (period === 'weekly') {
-      start = startOfWeek(now); // Monday of current week
+      start = periodBounds('weekly', offset).start;
       numDays = 7;
     } else { // monthly
-      start = startOfMonth(now);
-      numDays = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      start = periodBounds('monthly', offset).start;
+      numDays = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
     }
 
     const byDay = {};
@@ -2569,6 +2647,17 @@ document.getElementById('period-tabs').addEventListener('click', (e) => {
   const btn = e.target.closest('button');
   if (!btn) return;
   activePeriod = btn.dataset.period;
+  periodOffset = 0; // switching granularity always returns to the current period
+  applyPeriod();
+});
+
+document.getElementById('period-nav-prev').addEventListener('click', () => {
+  periodOffset += 1;
+  applyPeriod();
+});
+document.getElementById('period-nav-next').addEventListener('click', () => {
+  if (periodOffset === 0) return; // can't go into the future
+  periodOffset -= 1;
   applyPeriod();
 });
 
