@@ -159,6 +159,51 @@ def integrate_energy_kwh(session_start: str, session_end: str) -> float | None:
     return total_kwh
 
 
+# Midpoint of the two real efficiency measurements this was calibrated
+# against: the de 10A charger's own display (9.5A @ 235.9V = 2.24kW AC)
+# against our tracked 1.9kW DC in the same session (85%), and the OEM
+# 8A charger's rated 1.8kW against its long-observed ~1.5kW DC (83%).
+ASSUMED_CHARGE_EFFICIENCY = 0.845
+
+
+def detect_charger(session_start: str, session_end: str) -> int | None:
+    """Which charger a home session used, from its own observed power
+    rather than a manually-maintained "default" flag. The OEM (1.8kW)
+    and de (2.2kW) chargers produce DC ranges that don't overlap --
+    confirmed from real sessions: OEM consistently ~1.3-1.5kW, de
+    consistently ~1.9kW -- so matching the session's average power
+    against each charger's expected_dc (draw_kw x ASSUMED_CHARGE_EFFICIENCY)
+    reliably tells them apart without Dan ever flagging which is
+    "current". A static default was tried first and confirmed to go
+    silently stale the moment the physical charger actually in use
+    changed, misattributing cost and producing an impossible >100%
+    efficiency figure on one real session before this replaced it.
+
+    Returns None (left unresolved, not guessed) if there's no power
+    data for the session at all -- happens only for a near-instant
+    session with no real reading in between.
+    """
+    snapshots = sb_get(
+        "vehicle_snapshots",
+        [
+            ("recorded_at", f"gte.{session_start}"),
+            ("recorded_at", f"lte.{session_end}"),
+            ("select", "charging_power_kw"),
+        ],
+    )
+    readings = [float(s["charging_power_kw"]) for s in snapshots if s.get("charging_power_kw") is not None]
+    if not readings:
+        return None
+    observed_avg = sum(readings) / len(readings)
+
+    chargers = sb_get("chargers", {"select": "id,draw_kw"})
+    candidates = [c for c in chargers if c.get("draw_kw") is not None]
+    if not candidates:
+        return None
+    best = min(candidates, key=lambda c: abs(observed_avg - float(c["draw_kw"]) * ASSUMED_CHARGE_EFFICIENCY))
+    return best["id"]
+
+
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Great-circle distance between two lat/lon points, in metres."""
     r = 6371000.0
@@ -543,10 +588,15 @@ def main() -> None:
                 print(f"warning: odometer reading {start_odo} is implausible (last known: {prev_odo}), using last known value instead", file=sys.stderr)
                 start_odo = prev_odo
 
-            charger_id = None
-            if location_type == "home":
-                default_chargers = sb_get("chargers", {"is_default": "eq.true", "select": "id", "limit": "1"})
-                charger_id = default_chargers[0]["id"] if default_chargers else None
+            # charger_id is NOT guessed here -- there's no power data to
+            # go on yet at the instant a session opens. It's detected at
+            # close time instead, from the session's own observed power
+            # average (see detect_charger). A static "default charger"
+            # flag was tried first and confirmed to go silently stale
+            # the moment the physical charger in use changed -- sessions
+            # kept being tagged with the old one for days after Dan had
+            # actually switched to a different charger, understating
+            # cost and even producing a >100% efficiency figure once.
             sb_insert(
                 "charging_sessions",
                 {
@@ -557,7 +607,6 @@ def main() -> None:
                     "start_latitude": state["latitude"],
                     "start_longitude": state["longitude"],
                     "location_type": location_type,
-                    "charger_id": charger_id,
                 },
             )
             print(f"charging session opened ({location_type})")
@@ -615,7 +664,7 @@ def main() -> None:
             # reaches the battery after onboard-charger conversion loss.
             kwh_drawn = None
             charge_efficiency = None
-            charger_id = open_session.get("charger_id")
+            charger_id = detect_charger(open_session["started_at"], now) if location_type == "home" else None
             if location_type == "home" and charger_id and energy_added_kwh is not None:
                 chargers = sb_get("chargers", {"id": f"eq.{charger_id}", "select": "draw_kw", "limit": "1"})
                 if chargers and chargers[0].get("draw_kw") is not None:
@@ -646,6 +695,7 @@ def main() -> None:
                     "electricity_rate": electricity_rate,
                     "km_since_last_charge": km_since_last_charge,
                     "rate_confirmed": rate_confirmed,
+                    "charger_id": charger_id,
                     "kwh_drawn": kwh_drawn,
                     "charge_efficiency": charge_efficiency,
                 },
