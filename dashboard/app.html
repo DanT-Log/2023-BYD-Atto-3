@@ -1,0 +1,939 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Atto 3 — Charging Tracker</title>
+
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="/icon-192.png" type="image/png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Atto 3">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+
+<style>
+  :root{
+    --bg: #F2F2F7; --card: #FFFFFF; --hairline: rgba(60,60,67,0.29);
+    --text: #1C1C1E; --text-secondary: #8E8E93;
+    --green: #34C759; --green-2: #30B855; --blue: #007AFF; --orange: #FF9500; --red: #FF3B30;
+    --card-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 8px 30px rgba(0,0,0,0.045);
+    --active-tint: rgba(60,60,67,0.06); --segment-track: rgba(118,118,128,0.12);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg: #000000; --card: #1C1C1E; --hairline: rgba(84,84,88,0.6);
+      --text: #FFFFFF; --text-secondary: #8E8E93;
+      --green: #30D158; --green-2: #27B34C; --blue: #0A84FF; --orange: #FF9F0A; --red: #FF453A;
+      --card-shadow: none; --active-tint: rgba(255,255,255,0.06); --segment-track: rgba(118,118,128,0.24);
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body{
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased; min-height: 100vh; touch-action: manipulation;
+  }
+  .wrap{ max-width: 480px; margin: 0 auto; padding: max(20px, calc(env(safe-area-inset-top) + 12px)) 16px calc(84px + env(safe-area-inset-bottom)); }
+  .header-row{ display: flex; align-items: center; justify-content: space-between; margin: 4px 2px 16px; }
+  .title{ font-size: 34px; font-weight: 700; letter-spacing: -0.021em; }
+  .icon-btn{
+    width: 36px; height: 36px; border-radius: 50%; border: none; background: var(--card);
+    box-shadow: var(--card-shadow); display: flex; align-items: center; justify-content: center;
+    color: var(--blue); padding: 0; cursor: pointer; transition: background .15s ease, transform .15s ease;
+  }
+  .icon-btn:active{ background: var(--active-tint); transform: scale(0.92); }
+  .icon-btn svg{ width: 18px; height: 18px; }
+
+  .group{ margin: 0 0 20px; }
+  .group-header{ font-size: 13px; font-weight: 590; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.02em; padding: 0 16px 6px; }
+  .card{ background: var(--card); border-radius: 14px; box-shadow: var(--card-shadow); overflow: hidden; }
+  .row{ display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; min-height: 22px; }
+  .row + .row{ border-top: 0.5px solid var(--hairline); }
+  .row .k{ color: var(--text-secondary); font-size: 15px; }
+  .row .v{ font-size: 15px; font-weight: 590; text-align: right; }
+
+  .status-card{ background: var(--card); border-radius: 18px; box-shadow: var(--card-shadow); padding: 20px; margin-bottom: 16px; }
+  .status-top{ display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .status-dot{ width: 10px; height: 10px; border-radius: 50%; background: var(--text-secondary); flex-shrink: 0; }
+  .status-card.charging .status-dot{ background: var(--green); box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 20%, transparent); }
+  .status-card.starting .status-dot{ background: var(--orange); box-shadow: 0 0 0 4px color-mix(in srgb, var(--orange) 20%, transparent); }
+  .status-title{ font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+  .status-sub{ color: var(--text-secondary); font-size: 14px; margin: 2px 0 16px; }
+  .status-grid{ display: grid; grid-template-columns: 1fr 1fr; gap: 14px 10px; }
+  .stat{ display: flex; flex-direction: column; gap: 2px; }
+  .stat .label{ font-size: 12px; color: var(--text-secondary); }
+  .stat .value{ font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
+
+  .btn-row{ display: flex; gap: 10px; margin-top: 16px; }
+  .btn{
+    flex: 1; border: none; border-radius: 12px; padding: 12px 10px; font-size: 14px; font-weight: 600;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+    transition: opacity .15s ease, transform .1s ease;
+  }
+  .btn:active{ transform: scale(0.97); }
+  .btn:disabled{ opacity: 0.5; pointer-events: none; }
+  .btn-primary{ background: var(--blue); color: #fff; }
+  .btn-secondary{ background: var(--active-tint); color: var(--text); }
+  .btn.locked::after{ content: '🔒'; font-size: 11px; margin-left: 2px; }
+  .spin{ animation: spin 0.9s linear infinite; }
+  @keyframes spin{ to { transform: rotate(360deg); } }
+
+  .tab-bar{
+    position: fixed; left: 0; right: 0; bottom: 0; display: flex; background: var(--card);
+    border-top: 0.5px solid var(--hairline); padding: 6px 0 calc(4px + env(safe-area-inset-bottom));
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  }
+  @supports (backdrop-filter: blur(1px)){ .tab-bar{ background: color-mix(in srgb, var(--card) 85%, transparent); } }
+  .tab-bar-btn{
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; border: none;
+    background: transparent; padding: 4px 0; color: var(--text-secondary); cursor: pointer;
+  }
+  .tab-bar-btn svg{ width: 24px; height: 24px; }
+  .tab-bar-btn span{ font-size: 10px; font-weight: 590; }
+  .tab-bar-btn.active{ color: var(--blue); }
+  .tab-bar-btn:active{ opacity: 0.6; }
+
+  .panel{ display: none; }
+  .panel.active{ display: block; }
+
+  .segmented{ display: flex; background: var(--segment-track); border-radius: 9px; padding: 2px; margin: 0 0 10px; }
+  .segmented button{
+    flex: 1; border: none; background: transparent; padding: 7px 2px; font-family: inherit; font-size: 12.5px;
+    font-weight: 590; color: var(--text); border-radius: 7px; cursor: pointer; transition: background .18s ease;
+  }
+  .segmented button.active{ background: var(--card); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+  .period-nav{ display: flex; justify-content: center; margin: 0 0 14px; }
+  .period-nav select{
+    border: none; background: var(--segment-track); color: var(--text); font-family: inherit; font-size: 13px;
+    font-weight: 590; padding: 6px 28px 6px 12px; border-radius: 8px; -webkit-appearance: none; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238E8E93' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center;
+  }
+  .totals-card{ background: var(--card); border-radius: 14px; box-shadow: var(--card-shadow); padding: 16px; margin-bottom: 16px; }
+  .totals-hero{ font-size: 30px; font-weight: 700; letter-spacing: -0.01em; }
+  .totals-hero-sub{ font-size: 13px; color: var(--text-secondary); margin: 2px 0 12px; }
+  .totals-grid{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .totals-grid .stat .value{ font-size: 16px; }
+
+  .session-row{ padding: 13px 16px; cursor: pointer; }
+  .session-row-top{ display: flex; justify-content: space-between; align-items: baseline; }
+  .session-row-date{ font-size: 15px; font-weight: 590; }
+  .session-row-cost{ font-size: 15px; font-weight: 650; }
+  .session-row-sub{ font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+  .session-detail{ display: none; padding: 0 16px 14px; border-top: 0.5px solid var(--hairline); }
+  .session-detail.open{ display: block; }
+  .session-detail .row{ padding: 8px 0; }
+  .session-detail .row + .row{ border-top: none; }
+  .empty-state{ text-align: center; padding: 40px 16px; color: var(--text-secondary); font-size: 14px; }
+
+  .settings-row{ display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; gap: 12px; }
+  .settings-row + .settings-row{ border-top: 0.5px solid var(--hairline); }
+  .settings-row label{ font-size: 15px; flex: 1; }
+  .settings-row input[type="number"], .settings-row input[type="text"], .settings-row input[type="time"], .settings-row select{
+    border: none; background: var(--segment-track); color: var(--text); font-family: inherit; font-size: 15px;
+    font-weight: 590; padding: 6px 10px; border-radius: 8px; width: 110px; text-align: right;
+  }
+  .settings-row input[type="checkbox"]{ width: 22px; height: 22px; flex-shrink: 0; }
+  .note{ font-size: 12px; color: var(--text-secondary); padding: 8px 16px 0; line-height: 1.4; }
+  .charger-row{ display: flex; align-items: center; gap: 10px; padding: 11px 16px; }
+  .charger-row + .charger-row{ border-top: 0.5px solid var(--hairline); }
+  .charger-row input[type="text"]{ flex: 2; text-align: left; }
+  .charger-row input[type="number"]{ flex: 1; width: auto; }
+  .charger-row button{ border: none; background: none; color: var(--red); font-size: 18px; padding: 4px 6px; cursor: pointer; }
+  .save-bar{ position: sticky; bottom: calc(70px + env(safe-area-inset-bottom)); margin-top: 16px; }
+  .save-status{ text-align: center; font-size: 13px; color: var(--text-secondary); margin-top: 8px; min-height: 16px; }
+  .save-status.error{ color: var(--red); }
+  .save-status.ok{ color: var(--green); }
+
+  .lock-screen{ text-align: center; padding: 60px 20px; }
+  .lock-screen .icon{ font-size: 40px; margin-bottom: 12px; }
+  .lock-screen p{ color: var(--text-secondary); font-size: 14px; margin: 0 0 20px; }
+
+  .modal-backdrop{
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100;
+    align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-backdrop.open{ display: flex; }
+  .modal{ background: var(--card); border-radius: 16px; padding: 22px; width: 100%; max-width: 320px; }
+  .modal h3{ margin: 0 0 6px; font-size: 17px; }
+  .modal p{ margin: 0 0 14px; font-size: 13px; color: var(--text-secondary); }
+  .modal input[type="password"]{
+    width: 100%; border: none; background: var(--segment-track); border-radius: 10px; padding: 12px;
+    font-size: 16px; color: var(--text); margin-bottom: 8px; font-family: inherit;
+  }
+  .modal .err{ color: var(--red); font-size: 12px; min-height: 16px; margin-bottom: 8px; }
+  .modal-buttons{ display: flex; gap: 10px; }
+  .modal-buttons button{ flex: 1; border: none; border-radius: 10px; padding: 11px; font-size: 15px; font-weight: 600; cursor: pointer; }
+  .modal-cancel{ background: var(--active-tint); color: var(--text); }
+  .modal-confirm{ background: var(--blue); color: #fff; }
+
+  .toast{
+    position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(20px);
+    background: color-mix(in srgb, var(--text) 92%, transparent); color: var(--bg); padding: 10px 18px; border-radius: 12px;
+    font-size: 14px; font-weight: 590; opacity: 0; transition: opacity .25s ease, transform .25s ease; z-index: 90; pointer-events: none;
+    max-width: 85%; text-align: center;
+  }
+  .toast.show{ opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="header-row">
+    <div class="title">Atto 3</div>
+    <button class="icon-btn" id="lock-btn" aria-label="Unlock">
+      <svg id="lock-icon-locked" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      <svg id="lock-icon-unlocked" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none; color: var(--green);"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 4-4 4 4 0 0 1 4 4"/></svg>
+    </button>
+  </div>
+
+  <!-- ============ STATUS ============ -->
+  <div class="panel active" id="panel-status">
+    <div class="status-card" id="status-card">
+      <div class="status-top">
+        <div class="status-dot"></div>
+        <div class="status-title" id="status-title">Loading…</div>
+      </div>
+      <div class="status-sub" id="status-sub"></div>
+      <div class="status-grid" id="status-grid" style="display:none;"></div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="btn-light">Light check</button>
+        <button class="btn btn-secondary locked" id="btn-full">Full update</button>
+        <button class="btn btn-primary locked" id="btn-session">Session started</button>
+      </div>
+    </div>
+    <div class="group" id="open-session-group" style="display:none;">
+      <div class="group-header">Current session</div>
+      <div class="card" id="open-session-card"></div>
+    </div>
+  </div>
+
+  <!-- ============ HISTORY ============ -->
+  <div class="panel" id="panel-history">
+    <div class="segmented" id="period-tabs">
+      <button data-period="daily">Day</button>
+      <button data-period="weekly">Week</button>
+      <button data-period="monthly">Month</button>
+      <button data-period="yearly">Year</button>
+      <button data-period="all">All</button>
+    </div>
+    <div class="period-nav" id="period-nav" style="display:none;">
+      <select id="period-nav-select"></select>
+    </div>
+    <div class="totals-card">
+      <div class="totals-hero" id="hist-spent">—</div>
+      <div class="totals-hero-sub" id="hist-spent-sub"></div>
+      <div class="totals-grid">
+        <div class="stat"><span class="label">Energy</span><span class="value" id="hist-kwh">—</span></div>
+        <div class="stat"><span class="label">Distance</span><span class="value" id="hist-km">—</span></div>
+        <div class="stat"><span class="label">Cost / km</span><span class="value" id="hist-per-km">—</span></div>
+      </div>
+    </div>
+    <div class="group">
+      <div class="group-header">Sessions</div>
+      <div class="card" id="sessions-list"></div>
+    </div>
+  </div>
+
+  <!-- ============ SETTINGS ============ -->
+  <div class="panel" id="panel-settings">
+    <div id="settings-locked" class="lock-screen">
+      <div class="icon">🔒</div>
+      <p>Settings are locked. Enter the password to view and change them.</p>
+      <button class="btn btn-primary" id="settings-unlock-btn" style="max-width:200px; margin:0 auto; display:flex;">Unlock</button>
+    </div>
+    <div id="settings-form" style="display:none;">
+      <div class="group">
+        <div class="group-header">Checking</div>
+        <div class="card">
+          <div class="settings-row">
+            <label>Check interval</label>
+            <select id="s-interval">
+              <option value="0">Off</option>
+              <option value="1">1 min</option>
+              <option value="5">5 min</option>
+              <option value="60">60 min</option>
+            </select>
+          </div>
+        </div>
+        <div class="note">Off stops routine checks, but a charge already in progress keeps being tracked until it ends.</div>
+      </div>
+
+      <div class="group">
+        <div class="group-header">Rates</div>
+        <div class="card">
+          <div class="settings-row"><label>Home ($/kWh)</label><input type="number" step="0.01" min="0" id="s-home-rate"></div>
+          <div class="settings-row"><label>Public ($/kWh)</label><input type="number" step="0.01" min="0" id="s-public-rate"></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group-header">Chargers</div>
+        <div class="card" id="chargers-list"></div>
+        <div class="btn-row" style="margin-top:10px;">
+          <button class="btn btn-secondary" id="add-charger-btn">+ Add charger</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group-header">Home location</div>
+        <div class="card">
+          <div class="settings-row"><label>Latitude</label><input type="number" step="0.000001" id="s-home-lat"></div>
+          <div class="settings-row"><label>Longitude</label><input type="number" step="0.000001" id="s-home-lng"></div>
+          <div class="settings-row"><label>Radius (m)</label><input type="number" step="1" min="10" id="s-home-radius"></div>
+        </div>
+        <div class="btn-row" style="margin-top:10px;">
+          <button class="btn btn-secondary" id="use-location-btn">Use current location</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group-header">Charging window</div>
+        <div class="card">
+          <div class="settings-row"><label>Only charge during set times</label><input type="checkbox" id="s-window-enabled"></div>
+          <div class="settings-row"><label>Start</label><input type="time" id="s-window-start"></div>
+          <div class="settings-row"><label>End</label><input type="time" id="s-window-end"></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group-header">Stop at a battery %</div>
+        <div class="card">
+          <div class="settings-row"><label>Limit charging</label><input type="checkbox" id="s-pct-enabled"></div>
+          <div class="settings-row"><label>Stop at %</label><input type="number" step="1" min="20" max="100" id="s-stop-pct"></div>
+          <div class="settings-row"><label>Restart at %</label><input type="number" step="1" min="10" max="100" id="s-restart-pct"></div>
+        </div>
+        <div class="note">Restart must be lower than stop — it's the gap that stops the car cycling on and off right at the limit.</div>
+      </div>
+
+      <div class="save-bar">
+        <button class="btn btn-primary" id="save-settings-btn" style="width:100%;">Save changes</button>
+        <div class="save-status" id="save-status"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-bar-btn active" data-tab="status">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+    <span>Status</span>
+  </button>
+  <button class="tab-bar-btn" data-tab="history">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+    <span>History</span>
+  </button>
+  <button class="tab-bar-btn" data-tab="settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/></svg>
+    <span>Settings</span>
+  </button>
+</div>
+
+<div class="modal-backdrop" id="passkey-modal">
+  <div class="modal">
+    <h3>Password</h3>
+    <p id="passkey-modal-msg">Enter the password to continue.</p>
+    <input type="password" id="passkey-input" autocomplete="current-password" inputmode="text">
+    <div class="err" id="passkey-err"></div>
+    <div class="modal-buttons">
+      <button class="modal-cancel" id="passkey-cancel">Cancel</button>
+      <button class="modal-confirm" id="passkey-confirm">Unlock</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = "https://ujpcabmacpnbtyiharnk.supabase.co";
+const SUPABASE_KEY = "sb_publishable_MYvAXGlFH-AyOkGU-FceYg_THPLZqCy";
+const PASSKEY_STORAGE_KEY = "atto3_app_passkey";
+
+async function sb(path) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  });
+  if (!res.ok) throw new Error(`Supabase fetch failed: ${res.status}`);
+  return res.json();
+}
+async function fn(name, body) {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}),
+  });
+  let data = {};
+  try { data = await res.json(); } catch {}
+  return { ok: res.ok, status: res.status, data };
+}
+
+const fmtMoney = (n) => n == null ? '—' : `$${Number(n).toFixed(2)}`;
+const fmtKwh = (n) => n == null ? '—' : `${Number(n).toFixed(1)} kWh`;
+const fmtKm = (n) => n == null ? '—' : `${Number(n).toFixed(0)} km`;
+const fmtPct = (n) => n == null ? '—' : `${Math.round(Number(n))}%`;
+const fmtDate = (iso) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+const fmtTime = (iso) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+const fmtDateTime = (iso) => `${fmtDate(iso)}, ${fmtTime(iso)}`;
+
+let toastTimer = null;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+// ============================================================
+// Tabs
+// ============================================================
+document.querySelectorAll('.tab-bar-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-bar-btn').forEach(b => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.getElementById(`panel-${btn.dataset.tab}`).classList.add('active');
+    if (btn.dataset.tab === 'history' && allSessions.length === 0) loadHistory();
+  });
+});
+
+// ============================================================
+// Passkey / lock
+// ============================================================
+let appUnlocked = false; // resets on reload -- deliberately re-locks each fresh visit
+
+function showPasskeyModal(msg) {
+  return new Promise(resolve => {
+    const backdrop = document.getElementById('passkey-modal');
+    const input = document.getElementById('passkey-input');
+    const err = document.getElementById('passkey-err');
+    document.getElementById('passkey-modal-msg').textContent = msg && !msg.toLowerCase().includes('wrong')
+      ? msg : 'Enter the password to continue.';
+    err.textContent = msg && msg.toLowerCase().includes('wrong') ? msg : '';
+    input.value = '';
+    backdrop.classList.add('open');
+    setTimeout(() => input.focus(), 50);
+    function cleanup(val) {
+      backdrop.classList.remove('open');
+      document.getElementById('passkey-confirm').removeEventListener('click', onConfirm);
+      document.getElementById('passkey-cancel').removeEventListener('click', onCancel);
+      input.removeEventListener('keydown', onKey);
+      resolve(val);
+    }
+    function onConfirm() { cleanup(input.value || null); }
+    function onCancel() { cleanup(null); }
+    function onKey(e) { if (e.key === 'Enter') onConfirm(); }
+    document.getElementById('passkey-confirm').addEventListener('click', onConfirm);
+    document.getElementById('passkey-cancel').addEventListener('click', onCancel);
+    input.addEventListener('keydown', onKey);
+  });
+}
+async function getPasskey(errorMsg) {
+  const stored = localStorage.getItem(PASSKEY_STORAGE_KEY);
+  if (stored && !errorMsg) return stored;
+  const entered = await showPasskeyModal(errorMsg);
+  if (!entered) return null;
+  localStorage.setItem(PASSKEY_STORAGE_KEY, entered);
+  return entered;
+}
+function clearStoredPasskey() { localStorage.removeItem(PASSKEY_STORAGE_KEY); }
+
+async function verifyPasskeyServer(passkey) {
+  const r = await fn('verify-passkey', { passkey });
+  return r.ok;
+}
+
+// One unlock for the whole app: Settings, Full update, Session started,
+// and revealing any location all share the same passkey check.
+async function unlockApp() {
+  if (appUnlocked) return true;
+  let passkey = await getPasskey();
+  if (!passkey) return false;
+  let ok = await verifyPasskeyServer(passkey);
+  if (!ok) {
+    clearStoredPasskey();
+    const retry = await getPasskey('Wrong password — try again.');
+    if (!retry) return false;
+    ok = await verifyPasskeyServer(retry);
+    if (!ok) { clearStoredPasskey(); return false; }
+  }
+  appUnlocked = true;
+  document.getElementById('lock-icon-locked').style.display = 'none';
+  document.getElementById('lock-icon-unlocked').style.display = 'block';
+  document.getElementById('btn-full').classList.remove('locked');
+  document.getElementById('btn-session').classList.remove('locked');
+  await openSettingsIfUnlocked();
+  loadStatus();
+  return true;
+}
+document.getElementById('lock-btn').addEventListener('click', () => { if (!appUnlocked) unlockApp(); });
+document.getElementById('settings-unlock-btn').addEventListener('click', () => unlockApp());
+
+async function openSettingsIfUnlocked() {
+  if (!appUnlocked) return;
+  document.getElementById('settings-locked').style.display = 'none';
+  document.getElementById('settings-form').style.display = 'block';
+  await loadSettingsForm();
+}
+
+// ============================================================
+// STATUS
+// ============================================================
+let statusTimer = null;
+
+async function loadStatus() {
+  try {
+    const [snaps, settingsRows, openSessions] = await Promise.all([
+      sb('vehicle_snapshots_public?select=*&order=recorded_at.desc&limit=1'),
+      sb('tracker_settings_public?select=*'),
+      sb('charging_sessions_public?ended_at=is.null&order=started_at.desc&limit=1'),
+    ]);
+    renderStatus(snaps[0] || null, settingsRows[0] || {}, openSessions[0] || null);
+  } catch (err) {
+    console.error('status load failed', err);
+  }
+}
+
+function renderStatus(snap, settings, openSession) {
+  const card = document.getElementById('status-card');
+  const title = document.getElementById('status-title');
+  const sub = document.getElementById('status-sub');
+  const grid = document.getElementById('status-grid');
+
+  const now = Date.now();
+  const starting = !!settings.start_requested_at && !(snap && snap.is_charging)
+    && (!settings.fast_until || new Date(settings.fast_until).getTime() > now);
+
+  card.classList.toggle('charging', !!(snap && snap.is_charging));
+  card.classList.toggle('starting', starting);
+
+  if (!snap) {
+    title.textContent = 'No data yet';
+    sub.textContent = '';
+    grid.style.display = 'none';
+  } else if (starting) {
+    title.textContent = `Starting — ${fmtPct(snap.battery_pct)} battery`;
+    sub.textContent = 'Waiting for the car to confirm it has started charging…';
+    grid.style.display = 'none';
+  } else if (snap.is_charging) {
+    title.textContent = `Charging — ${fmtPct(snap.battery_pct)} battery`;
+    sub.textContent = `Updated ${fmtTime(snap.recorded_at)}`;
+    grid.style.display = 'grid';
+    const timeToFull = (snap.remaining_hours != null && snap.remaining_minutes != null)
+      ? `${snap.remaining_hours}h ${snap.remaining_minutes}m` : '—';
+    grid.innerHTML = `
+      <div class="stat"><span class="label">Speed</span><span class="value">${snap.charging_power_kw != null ? snap.charging_power_kw.toFixed(1) + ' kW' : '—'}</span></div>
+      <div class="stat"><span class="label">Time to full</span><span class="value">${timeToFull}</span></div>
+    `;
+  } else {
+    title.textContent = `Not charging — ${fmtPct(snap.battery_pct)} battery`;
+    const age = Math.round((now - new Date(snap.recorded_at).getTime()) / 60000);
+    const ageStr = age < 1 ? 'just now' : age < 60 ? `${age} min ago` : `${Math.round(age / 60)}h ago`;
+    sub.textContent = `${snap.range_km != null ? Math.round(snap.range_km) + ' km range · ' : ''}Updated ${ageStr}`;
+    grid.style.display = 'none';
+  }
+
+  renderOpenSession(openSession, snap, settings);
+}
+
+function renderOpenSession(session, snap, settings) {
+  const group = document.getElementById('open-session-group');
+  const card = document.getElementById('open-session-card');
+  if (!session) { group.style.display = 'none'; return; }
+  group.style.display = 'block';
+  const elapsedMs = Date.now() - new Date(session.started_at).getTime();
+  const elapsedH = elapsedMs / 3600000;
+  const power = snap && snap.charging_power_kw != null ? Number(snap.charging_power_kw) : null;
+  const kwhSoFar = power != null ? power * elapsedH : null;
+  const rate = session.location_type === 'home' ? settings.home_rate_per_kwh : settings.public_rate_per_kwh;
+  const costSoFar = kwhSoFar != null && rate != null ? kwhSoFar * rate : null;
+  const elapsedStr = elapsedH < 1 ? `${Math.round(elapsedMs / 60000)} min` : `${Math.floor(elapsedH)}h ${Math.round((elapsedH % 1) * 60)}m`;
+  card.innerHTML = `
+    <div class="row"><span class="k">Started</span><span class="v">${fmtTime(session.started_at)}</span></div>
+    <div class="row"><span class="k">Elapsed</span><span class="v">${elapsedStr}</span></div>
+    <div class="row"><span class="k">Energy so far</span><span class="v">${fmtKwh(kwhSoFar)}</span></div>
+    <div class="row"><span class="k">Cost so far</span><span class="v">${fmtMoney(costSoFar)}</span></div>
+    <div class="row"><span class="k">Where</span><span class="v">${session.location_type === 'home' ? 'Home' : session.location_type === 'public' ? 'Public' : 'Unknown'}</span></div>
+  `;
+}
+
+async function runWithButton(btn, label, task) {
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = label;
+  try { await task(); } finally { btn.disabled = false; btn.textContent = original; }
+}
+
+document.getElementById('btn-light').addEventListener('click', () => {
+  runWithButton(document.getElementById('btn-light'), 'Checking…', async () => {
+    const r = await fn('trigger-poll', {}); // no passkey -> always mode:auto, same path pg_cron uses
+    if (!r.ok) { toast('Could not start the check.'); return; }
+    toast('Checking…');
+    await new Promise(res => setTimeout(res, 15000));
+    await loadStatus();
+    toast('Updated');
+  });
+});
+
+document.getElementById('btn-full').addEventListener('click', async () => {
+  if (!appUnlocked && !(await unlockApp())) return;
+  const passkey = localStorage.getItem(PASSKEY_STORAGE_KEY);
+  runWithButton(document.getElementById('btn-full'), 'Asking the car…', async () => {
+    const r = await fn('trigger-poll', { passkey, mode: 'full' });
+    if (!r.ok) { toast('Could not start the update.'); return; }
+    toast('Asking the car…');
+    await new Promise(res => setTimeout(res, 20000));
+    await loadStatus();
+    toast('Updated');
+  });
+});
+
+document.getElementById('btn-session').addEventListener('click', async () => {
+  if (!appUnlocked && !(await unlockApp())) return;
+  if (!confirm('Send a real start-charging command to the car? Make sure it\'s actually plugged in first.')) return;
+  const passkey = localStorage.getItem(PASSKEY_STORAGE_KEY);
+  runWithButton(document.getElementById('btn-session'), 'Starting…', async () => {
+    const r = await fn('control-charge', { passkey, action: 'start' });
+    if (!r.ok || !r.data.triggered) { toast('Could not send the start command.'); return; }
+    toast('Starting — this can take a minute to confirm.');
+    await new Promise(res => setTimeout(res, 15000));
+    await loadStatus();
+  });
+});
+
+// ============================================================
+// HISTORY
+// ============================================================
+let allSessions = [];
+let activePeriod = 'weekly';
+let periodOffset = 0;
+
+function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+function startOfWeek(d) {
+  const x = startOfDay(d);
+  const day = x.getDay();
+  x.setDate(x.getDate() + ((day === 0 ? -6 : 1) - day));
+  return x;
+}
+function startOfMonth(d) { const x = startOfDay(d); x.setDate(1); return x; }
+function startOfYear(d) { const x = startOfDay(d); x.setMonth(0, 1); return x; }
+
+function periodBounds(period, offset) {
+  const now = new Date();
+  if (period === 'daily') {
+    const start = startOfDay(now); start.setDate(start.getDate() - offset);
+    const end = new Date(start); end.setDate(end.getDate() + 1);
+    return { start, end };
+  }
+  if (period === 'weekly') {
+    const start = startOfWeek(now); start.setDate(start.getDate() - offset * 7);
+    const end = new Date(start); end.setDate(end.getDate() + 7);
+    return { start, end };
+  }
+  if (period === 'monthly') {
+    const start = startOfMonth(now); start.setMonth(start.getMonth() - offset);
+    const end = new Date(start); end.setMonth(end.getMonth() + 1);
+    return { start, end };
+  }
+  if (period === 'yearly') {
+    const start = startOfYear(now); start.setFullYear(start.getFullYear() - offset);
+    const end = new Date(start); end.setFullYear(end.getFullYear() + 1);
+    return { start, end };
+  }
+  return { start: new Date(0), end: new Date(Date.now() + 86400000) };
+}
+function periodLabel(period, offset, start) {
+  if (period === 'all') return 'All time';
+  if (offset === 0) return { daily: 'Today', weekly: 'This week', monthly: 'This month', yearly: 'This year' }[period];
+  if (period === 'daily') return offset === 1 ? 'Yesterday' : start.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  if (period === 'weekly') {
+    const end = new Date(start); end.setDate(end.getDate() + 6);
+    return `${start.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${end.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`;
+  }
+  if (period === 'monthly') return start.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  return String(start.getFullYear());
+}
+function computeOffset(period, date, now) {
+  if (period === 'daily') return Math.round((startOfDay(now) - startOfDay(date)) / 86400000);
+  if (period === 'weekly') return Math.round((startOfWeek(now) - startOfWeek(date)) / (7 * 86400000));
+  if (period === 'monthly') return (now.getFullYear() * 12 + now.getMonth()) - (date.getFullYear() * 12 + date.getMonth());
+  if (period === 'yearly') return now.getFullYear() - date.getFullYear();
+  return 0;
+}
+function sessionOverlapFraction(session, rangeStart, rangeEnd) {
+  const sStart = new Date(session.started_at);
+  const sEnd = session.ended_at ? new Date(session.ended_at) : new Date();
+  const totalMs = sEnd - sStart;
+  if (totalMs <= 0) return (sStart >= rangeStart && sStart <= rangeEnd) ? 1 : 0;
+  const oStart = sStart > rangeStart ? sStart : rangeStart;
+  const oEnd = sEnd < rangeEnd ? sEnd : rangeEnd;
+  const oMs = oEnd - oStart;
+  return oMs > 0 ? oMs / totalMs : 0;
+}
+function computeSummary(sessions, rangeStart, rangeEnd) {
+  let totalCharges = 0, totalSpent = 0, totalKwh = 0, totalKm = 0;
+  sessions.forEach(s => {
+    const frac = sessionOverlapFraction(s, rangeStart, rangeEnd);
+    if (frac <= 0) return;
+    totalCharges += 1;
+    totalSpent += (Number(s.cost) || 0) * frac;
+    totalKwh += (Number(s.energy_added_kwh) || 0) * frac;
+    totalKm += (Number(s.km_since_last_charge) || 0) * frac;
+  });
+  return { totalCharges, totalSpent, totalKwh, totalKm, costPerKm: totalKm > 0 ? totalSpent / totalKm : null };
+}
+
+async function loadHistory() {
+  try {
+    allSessions = await sb('charging_sessions_public?select=*&order=started_at.desc&limit=500');
+    applyPeriod();
+  } catch (err) {
+    console.error('history load failed', err);
+  }
+}
+
+function applyPeriod() {
+  const { start, end } = periodBounds(activePeriod, activePeriod === 'all' ? 0 : periodOffset);
+  const rangeEnd = end < new Date() ? end : new Date();
+  const inRange = allSessions.filter(s => sessionOverlapFraction(s, start, rangeEnd) > 0);
+  const summary = computeSummary(inRange, start, rangeEnd);
+
+  document.getElementById('hist-spent').textContent = fmtMoney(summary.totalSpent);
+  document.getElementById('hist-spent-sub').textContent = summary.totalCharges
+    ? `${summary.totalCharges} charge${summary.totalCharges === 1 ? '' : 's'}` : 'No charges in this period';
+  document.getElementById('hist-kwh').textContent = fmtKwh(summary.totalKwh);
+  document.getElementById('hist-km').textContent = fmtKm(summary.totalKm);
+  document.getElementById('hist-per-km').textContent = summary.costPerKm != null ? `${(summary.costPerKm * 100).toFixed(1)}¢` : '—';
+
+  document.querySelectorAll('#period-tabs button').forEach(b => b.classList.toggle('active', b.dataset.period === activePeriod));
+  const nav = document.getElementById('period-nav');
+  if (activePeriod === 'all') { nav.style.display = 'none'; } else { nav.style.display = 'flex'; buildPeriodOptions(); }
+
+  renderSessionsList(inRange.slice().sort((a, b) => new Date(b.started_at) - new Date(a.started_at)));
+}
+
+function buildPeriodOptions() {
+  const now = new Date();
+  const offsets = new Set([0]);
+  allSessions.forEach(s => offsets.add(computeOffset(activePeriod, new Date(s.started_at), now)));
+  const sorted = [...offsets].filter(o => o >= 0).sort((a, b) => a - b);
+  const select = document.getElementById('period-nav-select');
+  select.innerHTML = sorted.map(off => {
+    const { start } = periodBounds(activePeriod, off);
+    return `<option value="${off}">${periodLabel(activePeriod, off, start)}</option>`;
+  }).join('');
+  select.value = periodOffset;
+}
+document.getElementById('period-nav-select').addEventListener('change', e => {
+  periodOffset = parseInt(e.target.value, 10) || 0;
+  applyPeriod();
+});
+document.getElementById('period-tabs').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  activePeriod = btn.dataset.period;
+  periodOffset = 0;
+  applyPeriod();
+});
+
+function renderSessionsList(sessions) {
+  const list = document.getElementById('sessions-list');
+  if (sessions.length === 0) { list.innerHTML = `<div class="empty-state">No charging sessions in this period.</div>`; return; }
+  list.innerHTML = sessions.map((s, i) => `
+    <div>
+      <div class="session-row" data-idx="${i}">
+        <div class="session-row-top">
+          <span class="session-row-date">${fmtDate(s.started_at)}</span>
+          <span class="session-row-cost">${fmtMoney(s.cost)}</span>
+        </div>
+        <div class="session-row-sub">${s.location_type === 'home' ? 'Home' : s.location_type === 'public' ? 'Public' : 'Unknown'} · ${fmtPct(s.start_pct)} → ${fmtPct(s.end_pct)} · ${fmtKwh(s.energy_added_kwh)}</div>
+      </div>
+      <div class="session-detail" id="session-detail-${i}"></div>
+    </div>
+  `).join('');
+  list.querySelectorAll('.session-row').forEach(row => {
+    row.addEventListener('click', () => toggleSessionDetail(sessions, parseInt(row.dataset.idx, 10)));
+  });
+}
+
+async function toggleSessionDetail(sessions, idx) {
+  const el = document.getElementById(`session-detail-${idx}`);
+  const open = el.classList.contains('open');
+  document.querySelectorAll('.session-detail.open').forEach(d => d.classList.remove('open'));
+  if (open) return;
+  const s = sessions[idx];
+  const durationMin = s.ended_at ? Math.round((new Date(s.ended_at) - new Date(s.started_at)) / 60000) : null;
+  el.innerHTML = `
+    <div class="row"><span class="k">Time</span><span class="v">${fmtDateTime(s.started_at)} – ${s.ended_at ? fmtTime(s.ended_at) : 'ongoing'}</span></div>
+    <div class="row"><span class="k">Duration</span><span class="v">${durationMin != null ? (durationMin < 60 ? durationMin + ' min' : (durationMin / 60).toFixed(1) + ' h') : '—'}</span></div>
+    <div class="row"><span class="k">Battery</span><span class="v">${fmtPct(s.start_pct)} → ${fmtPct(s.end_pct)}</span></div>
+    <div class="row"><span class="k">Energy delivered</span><span class="v">${fmtKwh(s.energy_added_kwh)}</span></div>
+    ${s.kwh_drawn != null ? `<div class="row"><span class="k">Energy drawn (AC)</span><span class="v">${fmtKwh(s.kwh_drawn)}</span></div>` : ''}
+    ${s.charge_efficiency != null ? `<div class="row"><span class="k">Charger efficiency</span><span class="v">${(s.charge_efficiency * 100).toFixed(0)}%</span></div>` : ''}
+    <div class="row"><span class="k">Distance since last</span><span class="v">${fmtKm(s.km_since_last_charge)}</span></div>
+    <div class="row"><span class="k">Cost</span><span class="v">${fmtMoney(s.cost)}${!s.rate_confirmed ? ' (estimated rate)' : ''}</span></div>
+    ${s.charger_name ? `<div class="row"><span class="k">Charger</span><span class="v">${s.charger_name}</span></div>` : ''}
+    <div class="row"><span class="k">Location</span><span class="v" id="loc-${idx}">${appUnlocked ? 'Loading…' : (s.location_type === 'home' ? 'Home 🔒' : s.location_type === 'public' ? 'Public 🔒' : 'Unknown')}</span></div>
+  `;
+  el.classList.add('open');
+  if (appUnlocked) {
+    const passkey = localStorage.getItem(PASSKEY_STORAGE_KEY);
+    const r = await fn('read-protected', { passkey, what: 'sessions', session_ids: [s.id] });
+    const loc = r.ok ? r.data.sessions?.[s.id] : null;
+    const target = document.getElementById(`loc-${idx}`);
+    if (target) {
+      target.textContent = (loc && loc.start_latitude != null)
+        ? `${loc.start_latitude.toFixed(5)}, ${loc.start_longitude.toFixed(5)}` : (s.location_type === 'home' ? 'Home' : 'Public');
+    }
+  }
+}
+
+// ============================================================
+// SETTINGS
+// ============================================================
+let chargersCache = [];
+
+async function loadSettingsForm() {
+  try {
+    const [settingsRows, chargers] = await Promise.all([
+      sb('tracker_settings_public?select=*'),
+      sb('chargers?select=*&order=id.asc'),
+    ]);
+    const s = settingsRows[0] || {};
+    document.getElementById('s-interval').value = String(s.poll_interval_minutes ?? 5);
+    document.getElementById('s-home-rate').value = s.home_rate_per_kwh ?? '';
+    document.getElementById('s-public-rate').value = s.public_rate_per_kwh ?? '';
+    document.getElementById('s-home-radius').value = s.home_radius_m ?? '';
+    document.getElementById('s-window-enabled').checked = !!s.time_window_enabled;
+    document.getElementById('s-window-start').value = s.window_start_time || '00:00';
+    document.getElementById('s-window-end').value = s.window_end_time || '06:00';
+    document.getElementById('s-pct-enabled').checked = !!s.pct_limit_enabled;
+    document.getElementById('s-stop-pct').value = s.auto_stop_at_pct ?? '';
+    document.getElementById('s-restart-pct').value = s.restart_at_pct ?? '';
+
+    // Home lat/lng are protected -- fetch only now that we're unlocked.
+    const passkey = localStorage.getItem(PASSKEY_STORAGE_KEY);
+    const homeRes = await fn('read-protected', { passkey, what: 'home' });
+    if (homeRes.ok && homeRes.data.home) {
+      document.getElementById('s-home-lat').value = homeRes.data.home.home_latitude ?? '';
+      document.getElementById('s-home-lng').value = homeRes.data.home.home_longitude ?? '';
+    }
+
+    chargersCache = chargers;
+    renderChargersList();
+  } catch (err) {
+    console.error('settings load failed', err);
+  }
+}
+
+function renderChargersList() {
+  const list = document.getElementById('chargers-list');
+  if (chargersCache.length === 0) { list.innerHTML = `<div class="empty-state">No chargers added yet.</div>`; return; }
+  list.innerHTML = chargersCache.map((c, i) => `
+    <div class="charger-row" data-idx="${i}">
+      <input type="text" class="c-name" value="${(c.name || '').replace(/"/g, '&quot;')}" placeholder="Name">
+      <input type="number" class="c-kw" step="0.1" min="0" value="${c.draw_kw ?? ''}" placeholder="kW">
+      <button class="c-delete" aria-label="Delete">✕</button>
+    </div>
+  `).join('');
+  list.querySelectorAll('.c-delete').forEach(btn => {
+    btn.addEventListener('click', () => deleteCharger(parseInt(btn.closest('.charger-row').dataset.idx, 10)));
+  });
+}
+
+document.getElementById('add-charger-btn').addEventListener('click', async () => {
+  const passkey = localStorage.getItem(PASSKEY_STORAGE_KEY);
+  const r = await fn('edit-chargers', { passkey, action: 'add', name: 'New charger', draw_kw: 2.0 });
+  if (!r.ok) { toast('Could not add charger.'); return; }
+  chargersCache.push(r.data.charger);
+  renderChargersList();
+});
+
+async function deleteCharger(idx) {
+  const c = chargersCache[idx];
+  if (!confirm(`Remove "${c.name}"?`)) return;
+  const passkey = localStorage.getItem(PASSKEY_STORAGE_KEY);
+  const r = await fn('edit-chargers', { passkey, action: 'delete', id: c.id });
+  if (!r.ok) { toast('Could not remove charger.'); return; }
+  chargersCache.splice(idx, 1);
+  renderChargersList();
+}
+
+document.getElementById('use-location-btn').addEventListener('click', () => {
+  if (!navigator.geolocation) { toast('Location is not available in this browser.'); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      document.getElementById('s-home-lat').value = pos.coords.latitude.toFixed(6);
+      document.getElementById('s-home-lng').value = pos.coords.longitude.toFixed(6);
+      toast('Location filled in — remember to save.');
+    },
+    () => toast('Could not get your location.'),
+  );
+});
+
+document.getElementById('save-settings-btn').addEventListener('click', async () => {
+  const statusEl = document.getElementById('save-status');
+  statusEl.textContent = 'Saving…';
+  statusEl.className = 'save-status';
+  const passkey = localStorage.getItem(PASSKEY_STORAGE_KEY);
+
+  const stopPct = parseFloat(document.getElementById('s-stop-pct').value);
+  const restartPct = parseFloat(document.getElementById('s-restart-pct').value);
+  if (document.getElementById('s-pct-enabled').checked && restartPct >= stopPct) {
+    statusEl.textContent = 'Restart % must be lower than Stop %.';
+    statusEl.className = 'save-status error';
+    return;
+  }
+
+  const payload = {
+    passkey,
+    poll_interval_minutes: parseFloat(document.getElementById('s-interval').value),
+    home_rate_per_kwh: parseFloat(document.getElementById('s-home-rate').value) || 0,
+    public_rate_per_kwh: parseFloat(document.getElementById('s-public-rate').value) || 0,
+    home_radius_m: parseFloat(document.getElementById('s-home-radius').value) || 200,
+    time_window_enabled: document.getElementById('s-window-enabled').checked,
+    window_start_time: document.getElementById('s-window-start').value,
+    window_end_time: document.getElementById('s-window-end').value,
+    pct_limit_enabled: document.getElementById('s-pct-enabled').checked,
+    auto_stop_at_pct: Number.isFinite(stopPct) ? stopPct : null,
+    restart_at_pct: Number.isFinite(restartPct) ? restartPct : null,
+  };
+  const lat = parseFloat(document.getElementById('s-home-lat').value);
+  const lng = parseFloat(document.getElementById('s-home-lng').value);
+  if (Number.isFinite(lat)) payload.home_latitude = lat;
+  if (Number.isFinite(lng)) payload.home_longitude = lng;
+
+  try {
+    const res = await fn('edit-settings', payload);
+    if (!res.ok) { statusEl.textContent = res.data.error || 'Save failed.'; statusEl.className = 'save-status error'; return; }
+
+    // Chargers: save every row's current name/kW against the cached list.
+    for (let i = 0; i < chargersCache.length; i++) {
+      const row = document.querySelectorAll('.charger-row')[i];
+      const name = row.querySelector('.c-name').value.trim();
+      const kw = parseFloat(row.querySelector('.c-kw').value);
+      if (!name || !Number.isFinite(kw)) continue;
+      if (name !== chargersCache[i].name || kw !== Number(chargersCache[i].draw_kw)) {
+        await fn('edit-chargers', { passkey, action: 'update', id: chargersCache[i].id, name, draw_kw: kw });
+      }
+    }
+
+    statusEl.textContent = 'Saved.';
+    statusEl.className = 'save-status ok';
+    setTimeout(() => { statusEl.textContent = ''; }, 3000);
+    loadStatus();
+  } catch (err) {
+    statusEl.textContent = 'Save failed.';
+    statusEl.className = 'save-status error';
+  }
+});
+
+// ============================================================
+// Boot
+// ============================================================
+loadStatus();
+statusTimer = setInterval(loadStatus, 30000);
+</script>
+</body>
+</html>
