@@ -427,7 +427,59 @@ def get_tracker_settings() -> dict:
     return rows[0]
 
 
-async def fetch_vehicle_state() -> dict:
+# "auto": read BYD's cloud only, and ask the car for a full update only when a
+# charge has just started or ended (odometer and location are recorded then).
+# "full": always ask the car. Set per run by the workflow's mode input.
+POLL_MODE = "full" if (os.environ.get("POLL_MODE") or "auto").strip().lower() == "full" else "auto"
+
+# A start/end time is estimated as the midpoint between the two checks that
+# bracket it, but only when they are close enough for that to mean something.
+MIDPOINT_MAX_GAP_MIN = 90
+
+
+def midpoint_iso(earlier_iso: str, later_iso: str) -> str:
+    """Halfway between two checks, e.g. the last "not charging" read and the
+    first "charging" one: the real start fell somewhere between them, so the
+    midpoint is the unbiased guess (noticing time is always late). A gap too
+    large to say anything about (a paused tracker, an outage) falls back to
+    the later time."""
+    a, b = parse_ts(earlier_iso), parse_ts(later_iso)
+    gap_min = (b - a).total_seconds() / 60
+    if gap_min <= 0 or gap_min > MIDPOINT_MAX_GAP_MIN:
+        return later_iso
+    return (a + (b - a) / 2).isoformat()
+
+
+def get_last_full_snapshot() -> dict | None:
+    """The most recent snapshot where the car was actually asked. Source of
+    the last known odometer, and of the range and realtime blob that light
+    snapshots carry forward so the existing Status page keeps working."""
+    rows = sb_get("vehicle_snapshots", {
+        "poll_kind": "eq.full",
+        "select": "recorded_at,odometer_km,range_km,car_reported_kwh_per_100km,raw",
+        "order": "recorded_at.desc",
+        "limit": "1",
+    })
+    return rows[0] if rows else None
+
+
+def reason_for_full_update(is_charging: bool | None, open_session: dict | None) -> str | None:
+    """Whether a light check must be upgraded to asking the car, and why.
+
+    Judged from the actual state (is a charge running? is a session open?),
+    never from "did the previous snapshot differ", so a missed or half-failed
+    earlier poll can't leave a charge untracked or a session unclosed.
+    """
+    if is_charging is None:
+        return "charging state unknown"
+    if is_charging and open_session is None:
+        return "a charge has started: recording odometer and location"
+    if not is_charging and open_session is not None:
+        return "a charge has ended: recording the end odometer"
+    return None
+
+
+async def fetch_vehicle_state(mode: str, open_session: dict | None, last_full: dict | None) -> dict:
     config = BydConfig.from_env()
     async with BydClient(config) as client:
         vehicles = await client.get_vehicles()
@@ -435,8 +487,74 @@ async def fetch_vehicle_state() -> dict:
             raise RuntimeError("No vehicles returned for this BYD account")
         vin = vehicles[0].vin
 
-        realtime = await client.get_vehicle_realtime(vin)
+        # The light check: BYD's own copy of the charging state. It carries
+        # everything needed to know whether the car is plugged in, charging,
+        # at what power and battery %, and the time to full -- and sends no
+        # request to the car (confirmed live: it flips within a minute of a
+        # plug-in or unplug with nothing else asking).
         charging = await client.get_charging_status(vin)
+
+        # "chargePower" (kW) lives in the raw response but isn't yet a typed
+        # field on ChargingStatus in pyBYD 0.0.75 -- pull it out directly.
+        charging_raw = charging.raw if isinstance(charging.raw, dict) else {}
+        charging_power_kw = None
+        raw_power = charging_raw.get("chargePower")
+        if raw_power is not None:
+            try:
+                charging_power_kw = float(raw_power)
+            except (TypeError, ValueError):
+                charging_power_kw = None
+
+        # connectState: whether the charging cable is physically plugged in,
+        # distinct from is_charging (plugged in but paused/scheduled counts as
+        # connected but not charging).
+        connect_state = charging_raw.get("connectState")
+
+        light_is_charging = (
+            charging.charging_state == ChargingState.CHARGING.value
+            if charging.charging_state is not None else None
+        )
+
+        reason = "manual full update" if mode == "full" else reason_for_full_update(light_is_charging, open_session)
+
+        if reason is None:
+            carried = last_full or {}
+            carried_raw = carried.get("raw") if isinstance(carried.get("raw"), dict) else {}
+            print("light check: asked BYD's cloud only")
+            return {
+                "battery_pct": charging.soc,
+                "is_charging": bool(light_is_charging),
+                "charging_power_kw": charging_power_kw,
+                "connect_state": connect_state,
+                # Never asked of the car on a light check. Odometer and
+                # location stay empty rather than carrying a stale value
+                # that would look like a real reading (the standby-loss
+                # calculations already skip rows without an odometer).
+                "odometer_km": None,
+                "latitude": None,
+                "longitude": None,
+                "full_hour": charging.full_hour,
+                "full_minute": charging.full_minute,
+                # The cloud's time-to-full IS the countdown: 928 of 1,014
+                # charging snapshots have it identical to the car's own
+                # remaining-time fields.
+                "remaining_hours": charging.full_hour,
+                "remaining_minutes": charging.full_minute,
+                # Carried forward from the last full update so the existing
+                # Status page keeps showing last-known range and vehicle
+                # card; realtime_as_of says how old that is.
+                "range_km": carried.get("range_km"),
+                "car_reported_kwh_per_100km": carried.get("car_reported_kwh_per_100km"),
+                "raw": {
+                    "realtime": carried_raw.get("realtime"),
+                    "realtime_as_of": carried.get("recorded_at"),
+                    "charging": charging.model_dump(mode="json"),
+                },
+                "poll_kind": "light",
+            }
+
+        print(f"asking the car for a full update: {reason}")
+        realtime = await client.get_vehicle_realtime(vin)
 
         try:
             gps = await client.get_gps_info(vin)
@@ -454,26 +572,6 @@ async def fetch_vehicle_state() -> dict:
         else:
             is_charging = realtime.charging_state == ChargingState.CHARGING
 
-        # "chargePower" (kW) lives in the raw response but isn't yet a typed
-        # field on ChargingStatus in pyBYD 0.0.75 — pull it out directly.
-        charging_raw = charging.raw if isinstance(charging.raw, dict) else {}
-        charging_power_kw = None
-        raw_power = charging_raw.get("chargePower")
-        if raw_power is not None:
-            try:
-                charging_power_kw = float(raw_power)
-            except (TypeError, ValueError):
-                charging_power_kw = None
-
-        # connectState: whether the charging cable is physically plugged
-        # in, distinct from is_charging (plugged in but paused/scheduled
-        # counts as connected but not charging). Same raw dict and same
-        # camelCase convention already confirmed working for chargePower
-        # above -- not independently verified the way the door locks
-        # were, but the failure mode here is low-stakes: worst case is a
-        # harmless no-op start command if nothing's actually plugged in.
-        connect_state = charging_raw.get("connectState")
-
         return {
             "battery_pct": battery_pct,
             "is_charging": is_charging,
@@ -486,11 +584,7 @@ async def fetch_vehicle_state() -> dict:
             # frequently unset (pyBYD nulls out BYD's -1 "not applicable" sentinel).
             "full_hour": charging.full_hour,
             "full_minute": charging.full_minute,
-            # A genuine countdown duration (hours/minutes remaining until full),
-            # distinct from full_hour/full_minute above which is an ambiguous
-            # clock-time-of-day with no date attached. Combined with this
-            # snapshot's own timestamp, this gives an unambiguous target
-            # date+time with no guessing about which day it lands on.
+            # A genuine countdown duration (hours/minutes remaining until full).
             "remaining_hours": realtime.remaining_hours,
             "remaining_minutes": realtime.remaining_minutes,
             # Car's own reported lifetime average efficiency, for comparison against
@@ -502,6 +596,7 @@ async def fetch_vehicle_state() -> dict:
                 "realtime": realtime.model_dump(mode="json"),
                 "charging": charging.model_dump(mode="json"),
             },
+            "poll_kind": "full",
         }
 
 
@@ -551,8 +646,13 @@ def main() -> None:
     # and when to poll again, is decided in scheduler.py.
     prev_snapshot = get_last_snapshot()
     settings = get_tracker_settings()
+    open_session_before = get_open_session()
+    last_full = get_last_full_snapshot()
 
-    state = asyncio.run(fetch_vehicle_state())
+    # Light by default (BYD's cloud only). Upgrades itself to asking the car
+    # when a charge has just started or ended, or when a full update was
+    # requested (POLL_MODE=full).
+    state = asyncio.run(fetch_vehicle_state(POLL_MODE, open_session_before, last_full))
     now = datetime.now(timezone.utc).isoformat()
 
     prev_is_charging = bool(prev_snapshot["is_charging"]) if prev_snapshot else None
@@ -570,154 +670,163 @@ def main() -> None:
 
     current_is_charging = bool(state["is_charging"])
 
-    # Charging just started
-    if not prev_is_charging and current_is_charging:
-        existing_open = get_open_session()
-        if existing_open is None:
-            location_type = classify_location(state["latitude"], state["longitude"], settings)
-            # Odometers only ever increase. A reading at or below the
-            # last known value (confirmed to happen: BYD's telemetry
-            # returned 0 for total_mileage on the very first poll right
-            # as the midnight auto-start fired, stuck sessions with 0 as
-            # start_odometer_km) is bad data, not a real value -- fall
-            # back to the last known good reading rather than storing
-            # something that makes km_since_last_charge wildly negative.
-            start_odo = state["odometer_km"]
-            prev_odo = prev_snapshot.get("odometer_km") if prev_snapshot else None
-            if prev_odo is not None and (start_odo is None or float(start_odo) < float(prev_odo)):
-                print(f"warning: odometer reading {start_odo} is implausible (last known: {prev_odo}), using last known value instead", file=sys.stderr)
-                start_odo = prev_odo
+    # A charge is running and no session is open for it: open one. Judged
+    # from the actual state rather than "did the previous snapshot say
+    # not-charging", so a missed or half-failed earlier poll can't leave a
+    # charge untracked.
+    if current_is_charging and open_session_before is None:
+        # Best estimate of when it really began: halfway between the last
+        # "not charging" check and this one (noticing time is always late).
+        session_started_at = (
+            midpoint_iso(prev_snapshot["recorded_at"], now)
+            if (prev_snapshot and not prev_is_charging) else now
+        )
+        location_type = classify_location(state["latitude"], state["longitude"], settings)
+        # Odometers only ever increase. A reading at or below the
+        # last known value (confirmed to happen: BYD's telemetry
+        # returned 0 for total_mileage on the very first poll right
+        # as the midnight auto-start fired, stuck sessions with 0 as
+        # start_odometer_km) is bad data, not a real value -- fall
+        # back to the last known good reading rather than storing
+        # something that makes km_since_last_charge wildly negative.
+        start_odo = state["odometer_km"]
+        prev_odo = last_full.get("odometer_km") if last_full else None
+        if prev_odo is not None and (start_odo is None or float(start_odo) < float(prev_odo)):
+            print(f"warning: odometer reading {start_odo} is implausible (last known: {prev_odo}), using last known value instead", file=sys.stderr)
+            start_odo = prev_odo
 
-            # charger_id is NOT guessed here -- there's no power data to
-            # go on yet at the instant a session opens. It's detected at
-            # close time instead, from the session's own observed power
-            # average (see detect_charger). A static "default charger"
-            # flag was tried first and confirmed to go silently stale
-            # the moment the physical charger in use changed -- sessions
-            # kept being tagged with the old one for days after Dan had
-            # actually switched to a different charger, understating
-            # cost and even producing a >100% efficiency figure once.
-            sb_insert(
-                "charging_sessions",
-                {
-                    "started_at": now,
-                    "start_pct": state["battery_pct"],
-                    "start_odometer_km": start_odo,
-                    "start_range_km": state["range_km"],
-                    "start_latitude": state["latitude"],
-                    "start_longitude": state["longitude"],
-                    "location_type": location_type,
-                },
+        # charger_id is NOT guessed here -- there's no power data to
+        # go on yet at the instant a session opens. It's detected at
+        # close time instead, from the session's own observed power
+        # average (see detect_charger). A static "default charger"
+        # flag was tried first and confirmed to go silently stale
+        # the moment the physical charger in use changed -- sessions
+        # kept being tagged with the old one for days after Dan had
+        # actually switched to a different charger, understating
+        # cost and even producing a >100% efficiency figure once.
+        sb_insert(
+            "charging_sessions",
+            {
+                "started_at": session_started_at,
+                "start_pct": state["battery_pct"],
+                "start_odometer_km": start_odo,
+                "start_range_km": state["range_km"],
+                "start_latitude": state["latitude"],
+                "start_longitude": state["longitude"],
+                "location_type": location_type,
+            },
+        )
+        print(f"charging session opened ({location_type})")
+        notify_charge_started(location_type, state["battery_pct"])
+
+    # A charge has ended and a session is still open: close it.
+    elif (not current_is_charging) and open_session_before is not None:
+        open_session = open_session_before
+        # Likewise the end: halfway between the last "charging" check and this one.
+        ended_at = (
+            midpoint_iso(prev_snapshot["recorded_at"], now)
+            if (prev_snapshot and prev_is_charging) else now
+        )
+        if parse_ts(ended_at) <= parse_ts(open_session["started_at"]):
+            ended_at = now
+        start_pct = open_session["start_pct"]
+        end_pct = state["battery_pct"]
+        pct_delta = (end_pct - start_pct) if (start_pct is not None and end_pct is not None) else None
+
+        energy_added_kwh = integrate_energy_kwh(open_session["started_at"], ended_at)
+        estimate_method = "integrated"
+        if energy_added_kwh is None:
+            energy_added_kwh = (
+                (pct_delta / 100.0) * settings["battery_capacity_kwh"] if pct_delta is not None else None
             )
-            print(f"charging session opened ({location_type})")
-            notify_charge_started(location_type, state["battery_pct"])
+            estimate_method = "pct_estimate"
+
+        last_closed = get_last_closed_session()
+        km_since_last_charge = None
+        if last_closed and last_closed.get("end_odometer_km") is not None and state["odometer_km"] is not None:
+            km_since_last_charge = open_session["start_odometer_km"] - last_closed["end_odometer_km"]
+
+        start_range_km = open_session.get("start_range_km")
+        end_range_km = state["range_km"]
+        range_added_km = (
+            end_range_km - start_range_km if (start_range_km is not None and end_range_km is not None) else None
+        )
+
+        location_type = open_session.get("location_type") or "unknown"
+        if location_type == "home" and settings.get("home_rate_per_kwh") is not None:
+            electricity_rate = settings["home_rate_per_kwh"]
+            rate_confirmed = True
+        elif location_type == "public" and settings.get("public_rate_per_kwh") is not None:
+            electricity_rate = settings["public_rate_per_kwh"]
+            rate_confirmed = False  # default estimate, not a confirmed real rate
         else:
-            print("charging session already open, skipping open")
+            electricity_rate = settings.get("home_rate_per_kwh")  # last-resort fallback
+            rate_confirmed = False
 
-    # Charging just stopped
-    elif prev_is_charging and not current_is_charging:
-        open_session = get_open_session()
-        if open_session is None:
-            print("warning: charging stopped but no open session found, nothing to close", file=sys.stderr)
-        else:
-            start_pct = open_session["start_pct"]
-            end_pct = state["battery_pct"]
-            pct_delta = (end_pct - start_pct) if (start_pct is not None and end_pct is not None) else None
+        # Wall-side (AC) energy for home sessions with a resolved
+        # charger: charger.draw_kw x duration. AC draw is flat for
+        # the whole session (observed consistently -- no ramp/taper
+        # like DC fast charging), so this simple form holds up. Cost
+        # is billed on this when available (the generated `cost`
+        # column falls back to energy_added_kwh otherwise) since
+        # that's what the meter actually charges for, not what
+        # reaches the battery after onboard-charger conversion loss.
+        kwh_drawn = None
+        charge_efficiency = None
+        charger_id = detect_charger(open_session["started_at"], ended_at) if location_type == "home" else None
+        if location_type == "home" and charger_id and energy_added_kwh is not None:
+            chargers = sb_get("chargers", {"id": f"eq.{charger_id}", "select": "draw_kw", "limit": "1"})
+            if chargers and chargers[0].get("draw_kw") is not None:
+                duration_hours = (parse_ts(ended_at) - parse_ts(open_session["started_at"])).total_seconds() / 3600
+                kwh_drawn = float(chargers[0]["draw_kw"]) * duration_hours
+                if kwh_drawn > 0:
+                    charge_efficiency = energy_added_kwh / kwh_drawn
 
-            energy_added_kwh = integrate_energy_kwh(open_session["started_at"], now)
-            estimate_method = "integrated"
-            if energy_added_kwh is None:
-                energy_added_kwh = (
-                    (pct_delta / 100.0) * settings["battery_capacity_kwh"] if pct_delta is not None else None
-                )
-                estimate_method = "pct_estimate"
+        # Same odometer sanity check as session-open: never let a
+        # reading below the last known value (bad telemetry, not a
+        # real odometer decrease) get stored.
+        end_odo = state["odometer_km"]
+        prev_odo_close = last_full.get("odometer_km") if last_full else None
+        if prev_odo_close is not None and (end_odo is None or float(end_odo) < float(prev_odo_close)):
+            print(f"warning: odometer reading {end_odo} is implausible (last known: {prev_odo_close}), using last known value instead", file=sys.stderr)
+            end_odo = prev_odo_close
 
-            last_closed = get_last_closed_session()
-            km_since_last_charge = None
-            if last_closed and last_closed.get("end_odometer_km") is not None and state["odometer_km"] is not None:
-                km_since_last_charge = open_session["start_odometer_km"] - last_closed["end_odometer_km"]
+        sb_patch(
+            "charging_sessions",
+            open_session["id"],
+            {
+                "ended_at": ended_at,
+                "end_pct": end_pct,
+                "end_odometer_km": end_odo,
+                "end_range_km": end_range_km,
+                "range_added_km": range_added_km,
+                "energy_added_kwh": energy_added_kwh,
+                "electricity_rate": electricity_rate,
+                "km_since_last_charge": km_since_last_charge,
+                "rate_confirmed": rate_confirmed,
+                "charger_id": charger_id,
+                "kwh_drawn": kwh_drawn,
+                "charge_efficiency": charge_efficiency,
+            },
+        )
+        print(
+            f"charging session closed: {pct_delta}% added, "
+            f"{energy_added_kwh} kWh @ {location_type} rate ({estimate_method})"
+            + (f", {kwh_drawn:.2f} kWh drawn, {charge_efficiency:.0%} efficiency" if kwh_drawn is not None else "")
+        )
 
-            start_range_km = open_session.get("start_range_km")
-            end_range_km = state["range_km"]
-            range_added_km = (
-                end_range_km - start_range_km if (start_range_km is not None and end_range_km is not None) else None
-            )
-
-            location_type = open_session.get("location_type") or "unknown"
-            if location_type == "home" and settings.get("home_rate_per_kwh") is not None:
-                electricity_rate = settings["home_rate_per_kwh"]
-                rate_confirmed = True
-            elif location_type == "public" and settings.get("public_rate_per_kwh") is not None:
-                electricity_rate = settings["public_rate_per_kwh"]
-                rate_confirmed = False  # default estimate, not a confirmed real rate
-            else:
-                electricity_rate = settings.get("home_rate_per_kwh")  # last-resort fallback
-                rate_confirmed = False
-
-            # Wall-side (AC) energy for home sessions with a resolved
-            # charger: charger.draw_kw x duration. AC draw is flat for
-            # the whole session (observed consistently -- no ramp/taper
-            # like DC fast charging), so this simple form holds up. Cost
-            # is billed on this when available (the generated `cost`
-            # column falls back to energy_added_kwh otherwise) since
-            # that's what the meter actually charges for, not what
-            # reaches the battery after onboard-charger conversion loss.
-            kwh_drawn = None
-            charge_efficiency = None
-            charger_id = detect_charger(open_session["started_at"], now) if location_type == "home" else None
-            if location_type == "home" and charger_id and energy_added_kwh is not None:
-                chargers = sb_get("chargers", {"id": f"eq.{charger_id}", "select": "draw_kw", "limit": "1"})
-                if chargers and chargers[0].get("draw_kw") is not None:
-                    duration_hours = (parse_ts(now) - parse_ts(open_session["started_at"])).total_seconds() / 3600
-                    kwh_drawn = float(chargers[0]["draw_kw"]) * duration_hours
-                    if kwh_drawn > 0:
-                        charge_efficiency = energy_added_kwh / kwh_drawn
-
-            # Same odometer sanity check as session-open: never let a
-            # reading below the last known value (bad telemetry, not a
-            # real odometer decrease) get stored.
-            end_odo = state["odometer_km"]
-            prev_odo_close = prev_snapshot.get("odometer_km") if prev_snapshot else None
-            if prev_odo_close is not None and (end_odo is None or float(end_odo) < float(prev_odo_close)):
-                print(f"warning: odometer reading {end_odo} is implausible (last known: {prev_odo_close}), using last known value instead", file=sys.stderr)
-                end_odo = prev_odo_close
-
-            sb_patch(
-                "charging_sessions",
-                open_session["id"],
-                {
-                    "ended_at": now,
-                    "end_pct": end_pct,
-                    "end_odometer_km": end_odo,
-                    "end_range_km": end_range_km,
-                    "range_added_km": range_added_km,
-                    "energy_added_kwh": energy_added_kwh,
-                    "electricity_rate": electricity_rate,
-                    "km_since_last_charge": km_since_last_charge,
-                    "rate_confirmed": rate_confirmed,
-                    "charger_id": charger_id,
-                    "kwh_drawn": kwh_drawn,
-                    "charge_efficiency": charge_efficiency,
-                },
-            )
-            print(
-                f"charging session closed: {pct_delta}% added, "
-                f"{energy_added_kwh} kWh @ {location_type} rate ({estimate_method})"
-                + (f", {kwh_drawn:.2f} kWh drawn, {charge_efficiency:.0%} efficiency" if kwh_drawn is not None else "")
-            )
-
-            cost = (kwh_drawn if kwh_drawn is not None else energy_added_kwh)
-            cost = cost * electricity_rate if (cost is not None and electricity_rate is not None) else None
-            notify_charge_finished(
-                location_type=location_type,
-                start_pct=start_pct,
-                end_pct=end_pct,
-                range_added_km=range_added_km,
-                energy_kwh=energy_added_kwh,
-                cost=cost,
-                rate_confirmed=rate_confirmed,
-                session_id=open_session["id"],
-            )
+        cost = (kwh_drawn if kwh_drawn is not None else energy_added_kwh)
+        cost = cost * electricity_rate if (cost is not None and electricity_rate is not None) else None
+        notify_charge_finished(
+            location_type=location_type,
+            start_pct=start_pct,
+            end_pct=end_pct,
+            range_added_km=range_added_km,
+            energy_kwh=energy_added_kwh,
+            cost=cost,
+            rate_confirmed=rate_confirmed,
+            session_id=open_session["id"],
+        )
 
     # Auto-stop: if a limit is configured and the car is currently
     # charging at or above it, attempt to stop. Checked every poll while
@@ -733,6 +842,7 @@ def main() -> None:
     step_settings = dict(settings)
     step_settings["manual_charge_until"] = _ts(settings.get("manual_charge_until"))
     step_settings["burst_until"] = _ts(settings.get("burst_until"))
+    step_settings["fast_until"] = _ts(settings.get("fast_until"))
     ctl = {
         "last_command": settings.get("last_command"),
         "last_command_at": _ts(settings.get("last_command_at")),
@@ -796,6 +906,12 @@ def main() -> None:
     }
     if result["clear_override"]:
         updates["manual_charge_until"] = None
+    # "Start charging" was pressed: once the car is seen charging (or the
+    # fast-check window has run out) the request is finished with.
+    fast_until_dt = _ts(settings.get("fast_until"))
+    if current_is_charging or (fast_until_dt is not None and fast_until_dt <= now_dt):
+        updates["start_requested_at"] = None
+        updates["fast_until"] = None
     sb_patch("tracker_settings", "true", updates)
     print(f"next poll: {updates['next_poll_at']} ({result['reason']})")
 

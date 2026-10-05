@@ -41,6 +41,8 @@ FAST_CHARGE_KW_THRESHOLD = 2.0  # home AC is a steady 1.4-1.5kW; above 2 is publ
 MIN_GAP = timedelta(seconds=60) # the cron ticks once a minute
 BURST_GAP_MIN = 3               # after the phone reports the car just parked, check this often
                                 # until a plug is seen (the window itself is burst_until)
+FAST_GAP_MIN = 1                # after "Start charging" is pressed, check this often until the
+                                # car confirms it is charging (the window is fast_until)
 DEFAULT_STANDBY_RATE = 0.2      # %/h fallback if we can't measure recent drain
 
 
@@ -183,6 +185,14 @@ def plan_next(now: datetime, *, state: dict, settings: dict, ctl: dict,
     # Once a plug is seen the burst has done its job: charging has its own
     # cadence, and "plugged but waiting for the window" is handled by the
     # window-open candidate below, so neither needs the burst.
+    # "Start charging" was just pressed (settings.fast_until). The car takes
+    # seconds to minutes to begin, so check every minute until it is seen
+    # charging, so the session is tracked straight away. Charging itself has
+    # its own cadence below, so this only applies while NOT yet charging.
+    fast_until = settings.get("fast_until")
+    if fast_until and fast_until > now and not charging:
+        cands.append((now + timedelta(minutes=FAST_GAP_MIN), "starting a charge: checking every minute"))
+
     burst_until = settings.get("burst_until")
     if burst_until and burst_until > now and not charging and not plugged:
         cands.append((now + timedelta(minutes=BURST_GAP_MIN), "just parked: watching for plug-in"))

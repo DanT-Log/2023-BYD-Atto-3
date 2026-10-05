@@ -43,6 +43,10 @@ on:
         description: 'normal (5-min cron) or fast (1-min fast-charge cron)'
         required: false
         default: 'normal'
+      mode:
+        description: 'auto = BYD cloud read only, asking the car only when a charge starts or ends; full = always ask the car'
+        required: false
+        default: 'auto'
 
 jobs:
   poll:
@@ -69,3 +73,4 @@ jobs:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           FORCE_POLL: ${{ github.event.inputs.force }}
           TRIGGER_SOURCE: ${{ github.event.inputs.source }}
+          POLL_MODE: ${{ github.event.inputs.mode || 'auto' }}
