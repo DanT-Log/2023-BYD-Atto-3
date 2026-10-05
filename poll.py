@@ -732,6 +732,7 @@ def main() -> None:
     now_dt = parse_ts(now)
     step_settings = dict(settings)
     step_settings["manual_charge_until"] = _ts(settings.get("manual_charge_until"))
+    step_settings["burst_until"] = _ts(settings.get("burst_until"))
     ctl = {
         "last_command": settings.get("last_command"),
         "last_command_at": _ts(settings.get("last_command_at")),

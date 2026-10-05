@@ -13,8 +13,9 @@ The model is deliberately small:
      command if the first one hasn't landed.
   3. If they match, sleep until the next event we can actually predict:
      a window edge, the predicted moment the battery hits the target or
-     the restart threshold, a manual override ending, or restoring the
-     car's own schedule.
+     the restart threshold, a manual override ending, restoring the
+     car's own schedule, or -- right after the phone reports the car just
+     parked -- a short burst of frequent checks for the plug going in.
 
 There is one place that decides when to poll next (plan_next). It
 replaces the old pair of crons plus a stack of "approaching X" margins.
@@ -38,6 +39,8 @@ CHARGING_INTERVAL_MIN = 5       # max gap while charging at normal (granny) spee
 FAST_CHARGING_INTERVAL_MIN = 1  # max gap while fast charging
 FAST_CHARGE_KW_THRESHOLD = 2.0  # home AC is a steady 1.4-1.5kW; above 2 is public/fast
 MIN_GAP = timedelta(seconds=60) # the cron ticks once a minute
+BURST_GAP_MIN = 3               # after the phone reports the car just parked, check this often
+                                # until a plug is seen (the window itself is burst_until)
 DEFAULT_STANDBY_RATE = 0.2      # %/h fallback if we can't measure recent drain
 
 
@@ -172,6 +175,17 @@ def plan_next(now: datetime, *, state: dict, settings: dict, ctl: dict,
 
     if override_until and override_until > now:
         cands.append((override_until, "charge-now override ends"))
+
+    # Phone says the car just parked (settings.burst_until, set by the
+    # `parked` edge function from a CarPlay/Bluetooth-disconnect shortcut).
+    # A charge starts when someone plugs in, which is minutes after parking,
+    # so check often for a short while instead of polling hard all day.
+    # Once a plug is seen the burst has done its job: charging has its own
+    # cadence, and "plugged but waiting for the window" is handled by the
+    # window-open candidate below, so neither needs the burst.
+    burst_until = settings.get("burst_until")
+    if burst_until and burst_until > now and not charging and not plugged:
+        cands.append((now + timedelta(minutes=BURST_GAP_MIN), "just parked: watching for plug-in"))
 
     if time_enabled:
         cands.append((next_occurrence(now_local, ws), "window opens"))
