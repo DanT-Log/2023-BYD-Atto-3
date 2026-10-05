@@ -14,6 +14,10 @@
 <meta name="apple-mobile-web-app-title" content="Atto 3">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet">
+
 <style>
   /* Pure white, near-black text, one restrained jade accent (charging-cable
      green, used only for live state and key numbers), hairline borders
@@ -31,7 +35,7 @@
   html, body { margin: 0; padding: 0; }
   body{
     background: var(--bg); color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: "Instrument Sans", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     -webkit-font-smoothing: antialiased; min-height: 100vh; touch-action: manipulation;
   }
   /* Every data figure (%, kW, kWh, $) uses this -- the single strongest
@@ -39,7 +43,7 @@
      data looks structurally different from prose, the way a real
      instrument or terminal renders numbers. */
   .num{ font-variant-numeric: tabular-nums; }
-  .wrap{ max-width: 480px; margin: 0 auto; padding: max(20px, calc(env(safe-area-inset-top) + 12px)) 16px calc(84px + env(safe-area-inset-bottom)); }
+  .wrap{ max-width: 480px; margin: 0 auto; padding: max(20px, calc(env(safe-area-inset-top) + 12px)) 16px calc(100px + env(safe-area-inset-bottom)); }
   .header-row{ display: flex; align-items: center; justify-content: space-between; margin: 4px 2px 16px; }
   .title{ font-size: 34px; font-weight: 700; letter-spacing: -0.021em; }
   .icon-btn{
@@ -52,13 +56,13 @@
 
   .group{ margin: 0 0 16px; }
   .group-header{ font-size: 13px; font-weight: 590; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.02em; padding: 0 16px 6px; }
-  .card{ background: var(--card); border-radius: 10px; box-shadow: var(--elevation); overflow: hidden; }
+  .card{ background: var(--card); border-radius: 18px; box-shadow: var(--elevation); overflow: hidden; }
   .row{ display: flex; align-items: center; justify-content: space-between; padding: 9px 14px; min-height: 20px; }
   .row + .row{ border-top: 0.5px solid var(--hairline); }
   .row .k{ color: var(--text-secondary); font-size: 15px; }
   .row .v{ font-size: 15px; font-weight: 590; text-align: right; font-variant-numeric: tabular-nums; }
 
-  .status-card{ background: var(--card); border-radius: 12px; box-shadow: var(--elevation); padding: 16px; margin-bottom: 14px; }
+  .status-card{ background: var(--card); border-radius: 22px; box-shadow: var(--elevation); padding: 18px; margin-bottom: 14px; }
   .status-top{ display: flex; align-items: baseline; gap: 8px; }
   .status-dot{ width: 8px; height: 8px; border-radius: 50%; background: var(--text-secondary); flex-shrink: 0; align-self: center; }
   .status-card.charging .status-dot{ background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent); }
@@ -130,16 +134,16 @@
   /* Status screen's action hierarchy: one dominant CTA, two smaller
      utility actions below it -- not three equal-weight buttons. */
   .btn-cta{
-    width: 100%; margin-top: 16px; min-height: 48px; border: none; border-radius: 10px;
-    background: var(--text); color: var(--card); font-family: inherit; font-size: 14px; font-weight: 650;
-    letter-spacing: 0.02em; display: flex; align-items: center; justify-content: center; gap: 9px; cursor: pointer;
+    width: 100%; margin-top: 16px; min-height: 52px; border: none; border-radius: 999px;
+    background: var(--text); color: var(--card); font-family: inherit; font-size: 15px; font-weight: 650;
+    letter-spacing: 0.01em; display: flex; align-items: center; justify-content: center; gap: 9px; cursor: pointer;
     transition: opacity .15s ease, transform .1s ease;
   }
   .btn-cta:active{ transform: scale(0.98); }
   .btn-cta:disabled{ opacity: 0.55; pointer-events: none; }
   .action-row{ display: flex; gap: 8px; margin-top: 8px; }
   .btn-util{
-    flex: 1; min-height: 38px; border: 1px solid var(--hairline); border-radius: 9px; background: transparent;
+    flex: 1; min-height: 40px; border: 1px solid var(--hairline); border-radius: 999px; background: transparent;
     color: var(--text-secondary); font-family: inherit; font-size: 12.5px; font-weight: 600;
     display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;
     transition: background .15s ease, transform .1s ease;
@@ -151,20 +155,23 @@
   .spin{ animation: spin 0.9s linear infinite; }
   @keyframes spin{ to { transform: rotate(360deg); } }
 
+  /* A floating black capsule, not a full-width bar flush with the
+     screen edges -- matches the reference apps directly (TripGlide,
+     DocSpot both float their nav with margin and a solid pill shape). */
   .tab-bar{
-    position: fixed; left: 0; right: 0; bottom: 0; display: flex; background: var(--card);
-    border-top: 0.5px solid var(--hairline); padding: 6px 0 calc(4px + env(safe-area-inset-bottom));
-    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    position: fixed; left: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom));
+    max-width: 448px; margin: 0 auto; display: flex; gap: 2px; background: var(--text);
+    border-radius: 999px; padding: 7px; box-shadow: 0 10px 28px rgba(23,25,28,0.22);
   }
-  @supports (backdrop-filter: blur(1px)){ .tab-bar{ background: color-mix(in srgb, var(--card) 85%, transparent); } }
   .tab-bar-btn{
     flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; border: none;
-    background: transparent; padding: 4px 0; color: var(--text-secondary); cursor: pointer;
+    background: transparent; padding: 8px 4px; border-radius: 999px; color: rgba(255,255,255,0.5); cursor: pointer;
+    transition: background .18s ease, color .18s ease;
   }
-  .tab-bar-btn svg{ width: 24px; height: 24px; }
+  .tab-bar-btn svg{ width: 21px; height: 21px; }
   .tab-bar-btn span{ font-size: 10px; font-weight: 590; }
-  .tab-bar-btn.active{ color: var(--blue); }
-  .tab-bar-btn:active{ opacity: 0.6; }
+  .tab-bar-btn.active{ color: #fff; background: rgba(255,255,255,0.14); }
+  .tab-bar-btn:active{ opacity: 0.75; }
 
   .panel{ display: none; }
   .panel.active{ display: block; }
@@ -182,7 +189,7 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238E8E93' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat; background-position: right 10px center;
   }
-  .totals-card{ background: var(--card); border-radius: 10px; box-shadow: var(--elevation); padding: 16px; margin-bottom: 16px; }
+  .totals-card{ background: var(--card); border-radius: 18px; box-shadow: var(--elevation); padding: 16px; margin-bottom: 16px; }
   .totals-hero{ font-size: 30px; font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
   .totals-hero-sub{ font-size: 13px; color: var(--text-secondary); margin: 2px 0 12px; }
   .totals-grid{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
@@ -218,7 +225,7 @@
   .charger-row input[type="text"]{ flex: 2; text-align: left; }
   .charger-row input[type="number"]{ flex: 1; width: auto; }
   .charger-row button{ border: none; background: none; color: var(--red); font-size: 18px; padding: 4px 6px; cursor: pointer; }
-  .save-bar{ position: sticky; bottom: calc(70px + env(safe-area-inset-bottom)); margin-top: 16px; }
+  .save-bar{ position: sticky; bottom: calc(84px + env(safe-area-inset-bottom)); margin-top: 16px; }
   .save-status{ text-align: center; font-size: 13px; color: var(--text-secondary); margin-top: 8px; min-height: 16px; }
   .save-status.error{ color: var(--red); }
   .save-status.ok{ color: #007A54; } /* darker than --accent: at this small size the base jade fails 4.5:1 */
@@ -232,7 +239,7 @@
     align-items: center; justify-content: center; padding: 20px;
   }
   .modal-backdrop.open{ display: flex; }
-  .modal{ background: var(--card); border-radius: 14px; padding: 22px; width: 100%; max-width: 320px; }
+  .modal{ background: var(--card); border-radius: 24px; padding: 22px; width: 100%; max-width: 320px; }
   .modal h3{ margin: 0 0 6px; font-size: 17px; }
   .modal p{ margin: 0 0 14px; font-size: 13px; color: var(--text-secondary); }
   .modal input[type="password"]{
