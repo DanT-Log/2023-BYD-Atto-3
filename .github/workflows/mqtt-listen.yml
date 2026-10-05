@@ -1,0 +1,53 @@
+name: MQTT listen test
+
+# One-off diagnostic: does BYD push car events over MQTT for this car?
+# See mqtt_listen.py. Manual trigger only, never scheduled.
+#
+# Shares the poller's concurrency group on purpose. Two overlapping logins
+# to the same BYD account are what caused the AES decryption failures
+# earlier (a fresh login invalidates the session an in-flight request is
+# using), and a listener holding a session open for ~20 minutes is exactly
+# the situation where an automatic poll would collide with it. Sharing the
+# group means any poll that fires during the window simply waits its turn
+# and runs right after, so there is no need to pause polling by hand.
+concurrency:
+  group: poll-byd-atto3
+  cancel-in-progress: false
+
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: 'How long to listen'
+        required: false
+        default: '20'
+      label:
+        description: 'Label stored with every captured event'
+        required: false
+        default: 'test'
+
+jobs:
+  listen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install -r requirements.txt
+
+      - run: python mqtt_listen.py
+        env:
+          PYTHONUNBUFFERED: '1'
+          BYD_USERNAME: ${{ secrets.BYD_USERNAME }}
+          BYD_PASSWORD: ${{ secrets.BYD_PASSWORD }}
+          BYD_COUNTRY_CODE: ${{ secrets.BYD_COUNTRY_CODE }}
+          BYD_BASE_URL: ${{ secrets.BYD_BASE_URL }}
+          BYD_CONTROL_PIN: ${{ secrets.BYD_CONTROL_PIN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          LISTEN_MINUTES: ${{ github.event.inputs.minutes }}
+          RUN_LABEL: ${{ github.event.inputs.label }}
