@@ -20,11 +20,11 @@
      instead of shadowed cards. Fixed light palette, deliberately -- no
      dark-mode swap, since that would work against "white, pure, clean". */
   :root{
-    --bg: #E7E4DD; --card: #FFFFFF; --hairline: #D8D4C9;
-    --text: #1A1816; --text-secondary: #8A867C;
+    --bg: #CDD1D5; --card: #FFFFFF; --hairline: #BEC2C6;
+    --text: #17191C; --text-secondary: #50545A;
     --accent: #00B67A; --accent-2: #00A06C; --blue: #1A1816; --orange: #B8860B; --red: #D64545;
     --card-shadow: none;
-    --active-tint: rgba(26,24,22,0.06); --segment-track: #DCD8CE;
+    --active-tint: rgba(23,25,28,0.06); --segment-track: #C2C6CA;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; padding: 0; }
@@ -59,8 +59,10 @@
   .status-card.charging .status-dot{ background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent); }
   .status-card.starting .status-dot{ background: var(--orange); box-shadow: 0 0 0 4px color-mix(in srgb, var(--orange) 20%, transparent); }
   .status-label{ font-size: 15px; font-weight: 650; letter-spacing: -0.005em; color: var(--text-secondary); }
-  .status-card.charging .status-label{ color: var(--accent); }
-  .status-card.starting .status-label{ color: var(--orange); }
+  /* Color-coding lives in the dot and the gauge ring, not here -- jade
+     and orange at this text size fail contrast (checked: 2.6:1 and
+     3.3:1 against white, need 4.5:1), so the label itself stays plain
+     near-black, which has excellent contrast everywhere. */
   .status-sub{ color: var(--text-secondary); font-size: 13px; text-align: center; margin: 14px 0 4px; }
 
   .gauge-wrap{ position: relative; width: 196px; height: 196px; margin: 10px auto 0; }
@@ -197,7 +199,7 @@
   .save-bar{ position: sticky; bottom: calc(70px + env(safe-area-inset-bottom)); margin-top: 16px; }
   .save-status{ text-align: center; font-size: 13px; color: var(--text-secondary); margin-top: 8px; min-height: 16px; }
   .save-status.error{ color: var(--red); }
-  .save-status.ok{ color: var(--accent); }
+  .save-status.ok{ color: #007A54; } /* darker than --accent: at this small size the base jade fails 4.5:1 */
 
   .lock-screen{ text-align: center; padding: 60px 20px; }
   .lock-screen .icon{ font-size: 40px; margin-bottom: 12px; }
@@ -237,7 +239,7 @@
     <div class="title">Atto 3</div>
     <button class="icon-btn" id="lock-btn" aria-label="Unlock">
       <svg id="lock-icon-locked" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
-      <svg id="lock-icon-unlocked" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none; color: var(--accent);"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 4-4 4 4 0 0 1 4 4"/></svg>
+      <svg id="lock-icon-unlocked" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none; color: #007A54;"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 4-4 4 4 0 0 1 4 4"/></svg>
     </button>
   </div>
 
