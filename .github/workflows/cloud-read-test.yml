@@ -1,0 +1,56 @@
+name: Cloud read test
+
+# One-off diagnostic: does BYD's cloud charging read stay fresh without
+# asking the car? See cloud_read_test.py.
+#
+# Shares the poller's concurrency group on purpose, for two reasons: two
+# overlapping BYD logins break each other (earlier AES decryption errors),
+# and, specific to this test, a normal poll asks the car to report in,
+# which would refresh the cloud's copy and spoil exactly what is being
+# measured. Sharing the group means any poll that fires during the test
+# waits its turn and runs right after.
+concurrency:
+  group: poll-byd-atto3
+  cancel-in-progress: false
+
+on:
+  # The tokens used to push code here can't call the workflow_dispatch API
+  # (Actions: write was never granted), so a push touching ONLY this marker
+  # file also starts a run. Temporary: remove together with the marker file
+  # once the test is done.
+  push:
+    paths:
+      - '.github/cloud-read-test-trigger'
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: 'How long to run'
+        required: false
+        default: '30'
+
+jobs:
+  read-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install -r requirements.txt
+
+      - run: python cloud_read_test.py
+        env:
+          PYTHONUNBUFFERED: '1'
+          BYD_USERNAME: ${{ secrets.BYD_USERNAME }}
+          BYD_PASSWORD: ${{ secrets.BYD_PASSWORD }}
+          BYD_COUNTRY_CODE: ${{ secrets.BYD_COUNTRY_CODE }}
+          BYD_BASE_URL: ${{ secrets.BYD_BASE_URL }}
+          BYD_CONTROL_PIN: ${{ secrets.BYD_CONTROL_PIN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          TEST_MINUTES: ${{ github.event.inputs.minutes || '30' }}
+          READ_EVERY_S: '60'
+          RUN_LABEL: ${{ format('read-test-{0}', github.run_number) }}
