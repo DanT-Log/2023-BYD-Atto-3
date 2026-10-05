@@ -15,13 +15,6 @@ concurrency:
   cancel-in-progress: false
 
 on:
-  # The tokens used to push code here can't call the workflow_dispatch API
-  # (Actions: write was never granted), so a push touching ONLY this marker
-  # file also starts a run. Nothing else triggers it. Temporary: remove
-  # together with the marker file once the MQTT test series is done.
-  push:
-    paths:
-      - '.github/mqtt-listen-trigger'
   workflow_dispatch:
     inputs:
       minutes:
