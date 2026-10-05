@@ -658,13 +658,16 @@ def main() -> None:
     prev_is_charging = bool(prev_snapshot["is_charging"]) if prev_snapshot else None
 
     # Always record the snapshot, regardless of transition.
-    # connect_state is used for the live auto-start decision below but
-    # was never added as a column on vehicle_snapshots -- inserting it
-    # at the top level 400s against Postgrest's schema. It's already
-    # captured separately inside state["raw"]["charging"] for the
-    # dashboard's plugged-in indicator, so this exclusion doesn't lose
-    # any data, just avoids inserting a column that doesn't exist.
-    snapshot_fields = {k: v for k, v in state.items() if k != "connect_state"}
+    # connect_state (plugged in or not) is used for the live auto-start
+    # decision below and is stored as its own column.
+    snapshot_fields = dict(state)
+    # Plug state is its own column now (it used to live only inside the raw
+    # payload). BYD sends it as a number or a numeric string; anything else
+    # is stored as unknown rather than guessed.
+    try:
+        snapshot_fields["connect_state"] = int(state.get("connect_state"))
+    except (TypeError, ValueError):
+        snapshot_fields["connect_state"] = None
     sb_insert("vehicle_snapshots", {"recorded_at": now, **snapshot_fields})
     print(f"snapshot written: battery={state['battery_pct']}% charging={state['is_charging']}")
 
