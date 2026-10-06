@@ -47,6 +47,15 @@
   .num{ font-variant-numeric: tabular-nums; }
   .wrap{ max-width: 480px; margin: 0 auto; padding: max(20px, calc(env(safe-area-inset-top) + 12px)) 16px calc(100px + env(safe-area-inset-bottom)); }
   .header-row{ display: flex; align-items: center; justify-content: space-between; margin: 4px 2px 16px; }
+  .hero-banner{
+    border-radius: 20px; overflow: hidden; margin-bottom: 16px; box-shadow: var(--elevation);
+    aspect-ratio: 2.3 / 1; background: var(--card);
+  }
+  .hero-banner img{ width: 100%; height: 100%; object-fit: cover; display: block; }
+  .photo-credit{
+    text-align: center; font-size: 11px; color: var(--text-secondary); padding: 4px 0 18px;
+  }
+  .photo-credit a{ color: inherit; }
   .title{ font-size: 34px; font-weight: 700; letter-spacing: -0.021em; }
   .icon-btn{
     width: 36px; height: 36px; border-radius: 50%; border: none; background: var(--card);
@@ -184,18 +193,48 @@
   .panel{ display: none; }
   .panel.active{ display: block; }
 
-  .segmented{ display: flex; background: var(--segment-track); border-radius: 9px; padding: 2px; margin: 0 0 10px; }
-  .segmented button{
-    flex: 1; border: 1px solid transparent; background: transparent; padding: 6px 2px; font-family: inherit; font-size: 12.5px;
-    font-weight: 590; color: var(--text); border-radius: 7px; cursor: pointer; transition: background .18s ease;
+  .range-btn{
+    display: flex; align-items: center; gap: 6px; border: 1px solid var(--hairline); background: var(--card);
+    color: var(--text); font-family: inherit; font-size: 14px; font-weight: 600; padding: 9px 16px;
+    border-radius: 999px; cursor: pointer; margin: 0 0 14px;
   }
-  .segmented button.active{ background: var(--card); border: 1px solid var(--hairline); }
-  .period-nav{ display: flex; justify-content: center; margin: 0 0 14px; }
-  .period-nav select{
-    border: none; background: var(--segment-track); color: var(--text); font-family: inherit; font-size: 13px;
-    font-weight: 590; padding: 6px 28px 6px 12px; border-radius: 8px; -webkit-appearance: none; appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238E8E93' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat; background-position: right 10px center;
+  .range-btn:active{ background: var(--active-tint); }
+  .range-btn svg{ color: var(--text-secondary); }
+
+  .range-modal{ max-width: 360px; max-height: 85vh; overflow-y: auto; }
+  .range-presets{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0; }
+  .range-presets button{
+    border: 1px solid var(--hairline); background: transparent; color: var(--text); font-family: inherit;
+    font-size: 13.5px; font-weight: 590; padding: 10px 8px; border-radius: 999px; cursor: pointer; transition: background .15s ease;
+  }
+  .range-presets button:active{ background: var(--active-tint); }
+  .range-presets button.selected{ background: var(--text); color: var(--card); border-color: var(--text); }
+  .range-divider{ display: flex; align-items: center; gap: 10px; margin: 4px 0 12px; color: var(--text-secondary); font-size: 12px; }
+  .range-divider::before, .range-divider::after{ content: ''; flex: 1; height: 1px; background: var(--hairline); }
+
+  .calendar-header{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .calendar-header #cal-month-label{ font-size: 14px; font-weight: 650; }
+  .cal-nav{
+    width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--hairline); background: transparent;
+    display: flex; align-items: center; justify-content: center; color: var(--text); cursor: pointer; padding: 0;
+  }
+  .cal-nav:active{ background: var(--active-tint); }
+  .calendar-weekdays{ display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 4px; }
+  .calendar-weekdays span{ text-align: center; font-size: 11px; color: var(--text-secondary); font-weight: 590; }
+  .calendar-grid{ display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px; }
+  .cal-day{
+    aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 13px;
+    border: none; background: transparent; color: var(--text); cursor: pointer; border-radius: 50%;
+    font-family: inherit; font-variant-numeric: tabular-nums; position: relative;
+  }
+  .cal-day:disabled{ color: var(--hairline); cursor: default; }
+  .cal-day.in-range{ background: var(--active-tint); border-radius: 0; }
+  .cal-day.range-start{ background: var(--active-tint); border-radius: 50% 0 0 50%; }
+  .cal-day.range-end{ background: var(--active-tint); border-radius: 0 50% 50% 0; }
+  .cal-day.range-start.range-end{ border-radius: 50%; }
+  .cal-day.range-start .cal-day-fill, .cal-day.range-end .cal-day-fill{
+    position: absolute; inset: 0; background: var(--text); color: var(--card); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
   }
   .totals-card{
     background: linear-gradient(165deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 45%), rgba(255,255,255,0.8); -webkit-backdrop-filter: blur(24px) saturate(200%); backdrop-filter: blur(24px) saturate(200%);
@@ -283,6 +322,10 @@
     </button>
   </div>
 
+  <div class="hero-banner">
+    <img src="atto3-hero.jpg" alt="BYD Atto 3" loading="eager">
+  </div>
+
   <!-- ============ STATUS ============ -->
   <div class="panel active" id="panel-status">
     <div class="status-card" id="status-card">
@@ -344,16 +387,10 @@
 
   <!-- ============ HISTORY ============ -->
   <div class="panel" id="panel-history">
-    <div class="segmented" id="period-tabs">
-      <button data-period="daily">Day</button>
-      <button data-period="weekly">Week</button>
-      <button data-period="monthly">Month</button>
-      <button data-period="yearly">Year</button>
-      <button data-period="all">All</button>
-    </div>
-    <div class="period-nav" id="period-nav" style="display:none;">
-      <select id="period-nav-select"></select>
-    </div>
+    <button class="range-btn" id="range-btn">
+      <span id="range-btn-label">This week</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
     <div class="totals-card">
       <div class="totals-hero" id="hist-spent">—</div>
       <div class="totals-hero-sub" id="hist-spent-sub"></div>
@@ -478,6 +515,40 @@
     <div class="modal-buttons">
       <button class="modal-cancel" id="passkey-cancel">Cancel</button>
       <button class="modal-confirm" id="passkey-confirm">Unlock</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="range-modal">
+  <div class="modal range-modal">
+    <h3>Date range</h3>
+    <div class="range-presets" id="range-presets">
+      <button data-preset="today">Today</button>
+      <button data-preset="yesterday">Yesterday</button>
+      <button data-preset="this-week">This week</button>
+      <button data-preset="last-week">Last week</button>
+      <button data-preset="this-month">This month</button>
+      <button data-preset="last-month">Last month</button>
+      <button data-preset="this-year">This year</button>
+      <button data-preset="all">All time</button>
+    </div>
+    <div class="range-divider"><span>or pick dates</span></div>
+    <div class="calendar">
+      <div class="calendar-header">
+        <button class="cal-nav" id="cal-prev" aria-label="Previous month">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <div id="cal-month-label">October 2026</div>
+        <button class="cal-nav" id="cal-next" aria-label="Next month">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+      </div>
+      <div class="calendar-weekdays"><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span></div>
+      <div class="calendar-grid" id="calendar-grid"></div>
+    </div>
+    <div class="modal-buttons">
+      <button class="modal-cancel" id="range-cancel">Cancel</button>
+      <button class="modal-confirm" id="range-apply">Apply</button>
     </div>
   </div>
 </div>
@@ -773,8 +844,7 @@ document.getElementById('btn-session').addEventListener('click', async () => {
 // HISTORY
 // ============================================================
 let allSessions = [];
-let activePeriod = 'weekly';
-let periodOffset = 0;
+let selectedRange = null; // { start, end, label } -- set by loadHistory() on boot
 
 function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
 function startOfWeek(d) {
@@ -785,49 +855,41 @@ function startOfWeek(d) {
 }
 function startOfMonth(d) { const x = startOfDay(d); x.setDate(1); return x; }
 function startOfYear(d) { const x = startOfDay(d); x.setMonth(0, 1); return x; }
+const fmtShort = (d) => d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 
-function periodBounds(period, offset) {
+function computePreset(name) {
   const now = new Date();
-  if (period === 'daily') {
-    const start = startOfDay(now); start.setDate(start.getDate() - offset);
-    const end = new Date(start); end.setDate(end.getDate() + 1);
-    return { start, end };
+  if (name === 'today') {
+    const start = startOfDay(now); const end = new Date(start); end.setDate(end.getDate() + 1);
+    return { start, end, label: 'Today' };
   }
-  if (period === 'weekly') {
-    const start = startOfWeek(now); start.setDate(start.getDate() - offset * 7);
-    const end = new Date(start); end.setDate(end.getDate() + 7);
-    return { start, end };
+  if (name === 'yesterday') {
+    const end = startOfDay(now); const start = new Date(end); start.setDate(start.getDate() - 1);
+    return { start, end, label: 'Yesterday' };
   }
-  if (period === 'monthly') {
-    const start = startOfMonth(now); start.setMonth(start.getMonth() - offset);
-    const end = new Date(start); end.setMonth(end.getMonth() + 1);
-    return { start, end };
+  if (name === 'this-week') {
+    const start = startOfWeek(now); const end = new Date(start); end.setDate(end.getDate() + 7);
+    return { start, end, label: 'This week' };
   }
-  if (period === 'yearly') {
-    const start = startOfYear(now); start.setFullYear(start.getFullYear() - offset);
-    const end = new Date(start); end.setFullYear(end.getFullYear() + 1);
-    return { start, end };
+  if (name === 'last-week') {
+    const end = startOfWeek(now); const start = new Date(end); start.setDate(start.getDate() - 7);
+    return { start, end, label: 'Last week' };
   }
-  return { start: new Date(0), end: new Date(Date.now() + 86400000) };
+  if (name === 'this-month') {
+    const start = startOfMonth(now); const end = new Date(start); end.setMonth(end.getMonth() + 1);
+    return { start, end, label: 'This month' };
+  }
+  if (name === 'last-month') {
+    const end = startOfMonth(now); const start = new Date(end); start.setMonth(start.getMonth() - 1);
+    return { start, end, label: 'Last month' };
+  }
+  if (name === 'this-year') {
+    const start = startOfYear(now); const end = new Date(start); end.setFullYear(end.getFullYear() + 1);
+    return { start, end, label: 'This year' };
+  }
+  return { start: new Date(0), end: new Date(Date.now() + 86400000), label: 'All time' }; // 'all'
 }
-function periodLabel(period, offset, start) {
-  if (period === 'all') return 'All time';
-  if (offset === 0) return { daily: 'Today', weekly: 'This week', monthly: 'This month', yearly: 'This year' }[period];
-  if (period === 'daily') return offset === 1 ? 'Yesterday' : start.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
-  if (period === 'weekly') {
-    const end = new Date(start); end.setDate(end.getDate() + 6);
-    return `${start.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${end.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`;
-  }
-  if (period === 'monthly') return start.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-  return String(start.getFullYear());
-}
-function computeOffset(period, date, now) {
-  if (period === 'daily') return Math.round((startOfDay(now) - startOfDay(date)) / 86400000);
-  if (period === 'weekly') return Math.round((startOfWeek(now) - startOfWeek(date)) / (7 * 86400000));
-  if (period === 'monthly') return (now.getFullYear() * 12 + now.getMonth()) - (date.getFullYear() * 12 + date.getMonth());
-  if (period === 'yearly') return now.getFullYear() - date.getFullYear();
-  return 0;
-}
+
 function sessionOverlapFraction(session, rangeStart, rangeEnd) {
   const sStart = new Date(session.started_at);
   const sEnd = session.ended_at ? new Date(session.ended_at) : new Date();
@@ -854,18 +916,20 @@ function computeSummary(sessions, rangeStart, rangeEnd) {
 async function loadHistory() {
   try {
     allSessions = await sb('charging_sessions_public?select=*&order=started_at.desc&limit=500');
-    applyPeriod();
+    if (!selectedRange) selectedRange = computePreset('this-week');
+    applyRange();
   } catch (err) {
     console.error('history load failed', err);
   }
 }
 
-function applyPeriod() {
-  const { start, end } = periodBounds(activePeriod, activePeriod === 'all' ? 0 : periodOffset);
+function applyRange() {
+  const { start, end, label } = selectedRange;
   const rangeEnd = end < new Date() ? end : new Date();
   const inRange = allSessions.filter(s => sessionOverlapFraction(s, start, rangeEnd) > 0);
   const summary = computeSummary(inRange, start, rangeEnd);
 
+  document.getElementById('range-btn-label').textContent = label;
   document.getElementById('hist-spent').textContent = fmtMoney(summary.totalSpent);
   document.getElementById('hist-spent-sub').textContent = summary.totalCharges
     ? `${summary.totalCharges} charge${summary.totalCharges === 1 ? '' : 's'}` : 'No charges in this period';
@@ -873,35 +937,92 @@ function applyPeriod() {
   document.getElementById('hist-km').textContent = fmtKm(summary.totalKm);
   document.getElementById('hist-per-km').textContent = summary.costPerKm != null ? `${(summary.costPerKm * 100).toFixed(1)}¢` : '—';
 
-  document.querySelectorAll('#period-tabs button').forEach(b => b.classList.toggle('active', b.dataset.period === activePeriod));
-  const nav = document.getElementById('period-nav');
-  if (activePeriod === 'all') { nav.style.display = 'none'; } else { nav.style.display = 'flex'; buildPeriodOptions(); }
-
   renderSessionsList(inRange.slice().sort((a, b) => new Date(b.started_at) - new Date(a.started_at)));
 }
 
-function buildPeriodOptions() {
+// ---- Range picker modal: presets apply immediately, calendar stages a
+// custom pick that only commits on "Apply". ----
+let calViewYear, calViewMonth, calPickStart = null, calPickEnd = null;
+
+function openRangeModal() {
   const now = new Date();
-  const offsets = new Set([0]);
-  allSessions.forEach(s => offsets.add(computeOffset(activePeriod, new Date(s.started_at), now)));
-  const sorted = [...offsets].filter(o => o >= 0).sort((a, b) => a - b);
-  const select = document.getElementById('period-nav-select');
-  select.innerHTML = sorted.map(off => {
-    const { start } = periodBounds(activePeriod, off);
-    return `<option value="${off}">${periodLabel(activePeriod, off, start)}</option>`;
-  }).join('');
-  select.value = periodOffset;
+  calViewYear = now.getFullYear(); calViewMonth = now.getMonth();
+  calPickStart = null; calPickEnd = null;
+  document.querySelectorAll('.range-presets button').forEach(b => b.classList.remove('selected'));
+  renderCalendar();
+  document.getElementById('range-modal').classList.add('open');
 }
-document.getElementById('period-nav-select').addEventListener('change', e => {
-  periodOffset = parseInt(e.target.value, 10) || 0;
-  applyPeriod();
+function closeRangeModal() { document.getElementById('range-modal').classList.remove('open'); }
+
+function renderCalendar() {
+  document.getElementById('cal-month-label').textContent =
+    new Date(calViewYear, calViewMonth, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const firstOfMonth = new Date(calViewYear, calViewMonth, 1);
+  const daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
+  // Monday-first leading blanks, matching the Mo..Su header
+  const leading = (firstOfMonth.getDay() === 0) ? 6 : firstOfMonth.getDay() - 1;
+  const today = startOfDay(new Date());
+
+  let html = '';
+  for (let i = 0; i < leading; i++) html += '<div></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(calViewYear, calViewMonth, d);
+    const disabled = date > today;
+    let cls = 'cal-day';
+    if (calPickStart && date.getTime() === calPickStart.getTime()) cls += ' range-start';
+    if (calPickEnd && date.getTime() === calPickEnd.getTime()) cls += ' range-end';
+    if (calPickStart && calPickEnd && date > calPickStart && date < calPickEnd) cls += ' in-range';
+    if (calPickStart && !calPickEnd && date.getTime() === calPickStart.getTime()) cls += ' range-end'; // single day looks whole
+    const inner = cls.includes('range-start') || cls.includes('range-end') ? `<span class="cal-day-fill">${d}</span>` : d;
+    html += `<button type="button" class="${cls}" data-day="${d}" ${disabled ? 'disabled' : ''}>${inner}</button>`;
+  }
+  document.getElementById('calendar-grid').innerHTML = html;
+  document.querySelectorAll('.cal-day:not(:disabled)').forEach(btn => {
+    btn.addEventListener('click', () => onCalDayClick(parseInt(btn.dataset.day, 10)));
+  });
+}
+function onCalDayClick(day) {
+  const date = new Date(calViewYear, calViewMonth, day);
+  if (!calPickStart || (calPickStart && calPickEnd)) {
+    calPickStart = date; calPickEnd = null;
+  } else if (date < calPickStart) {
+    calPickEnd = calPickStart; calPickStart = date;
+  } else {
+    calPickEnd = date;
+  }
+  document.querySelectorAll('.range-presets button').forEach(b => b.classList.remove('selected'));
+  renderCalendar();
+}
+
+document.getElementById('range-btn').addEventListener('click', openRangeModal);
+document.getElementById('range-cancel').addEventListener('click', closeRangeModal);
+document.getElementById('cal-prev').addEventListener('click', () => {
+  calViewMonth--; if (calViewMonth < 0) { calViewMonth = 11; calViewYear--; }
+  renderCalendar();
 });
-document.getElementById('period-tabs').addEventListener('click', e => {
+document.getElementById('cal-next').addEventListener('click', () => {
+  calViewMonth++; if (calViewMonth > 11) { calViewMonth = 0; calViewYear++; }
+  renderCalendar();
+});
+document.getElementById('range-presets').addEventListener('click', e => {
   const btn = e.target.closest('button');
   if (!btn) return;
-  activePeriod = btn.dataset.period;
-  periodOffset = 0;
-  applyPeriod();
+  document.querySelectorAll('.range-presets button').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  calPickStart = null; calPickEnd = null; renderCalendar();
+  selectedRange = computePreset(btn.dataset.preset);
+  applyRange();
+  closeRangeModal();
+});
+document.getElementById('range-apply').addEventListener('click', () => {
+  if (!calPickStart) { closeRangeModal(); return; }
+  const start = startOfDay(calPickStart);
+  const end = calPickEnd ? new Date(startOfDay(calPickEnd).getTime() + 86400000) : new Date(start.getTime() + 86400000);
+  const label = calPickEnd && calPickEnd.getTime() !== calPickStart.getTime()
+    ? `${fmtShort(calPickStart)} – ${fmtShort(calPickEnd)}` : fmtShort(calPickStart);
+  selectedRange = { start, end, label };
+  applyRange();
+  closeRangeModal();
 });
 
 function renderSessionsList(sessions) {
