@@ -6,7 +6,7 @@
 <title>Atto 3 — Charging Tracker</title>
 
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#F8F9FA" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="/icon-192.png" type="image/png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -24,7 +24,7 @@
      instead of shadowed cards. Fixed light palette, deliberately -- no
      dark-mode swap, since that would work against "white, pure, clean". */
   :root{
-    --bg: #CDD1D5; --card: #FFFFFF; --hairline: #BEC2C6;
+    --bg: #F5F6F7; --card: #FFFFFF; --hairline: #E8E9EB;
     --text: #17191C; --text-secondary: #50545A;
     --accent: #00B67A; --accent-2: #00A06C; --blue: #17191C; --orange: #B8860B; --red: #D64545;
     --card-shadow: none;
@@ -34,7 +34,9 @@
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; padding: 0; }
   body{
-    background: var(--bg); color: var(--text);
+    background: linear-gradient(170deg, #F8F9FA 0%, #E3E5E8 55%, #D6D9DD 100%);
+    background-attachment: fixed;
+    color: var(--text);
     font-family: "Instrument Sans", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     -webkit-font-smoothing: antialiased; min-height: 100vh; touch-action: manipulation;
   }
@@ -56,13 +58,19 @@
 
   .group{ margin: 0 0 16px; }
   .group-header{ font-size: 13px; font-weight: 590; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.02em; padding: 0 16px 6px; }
-  .card{ background: var(--card); border-radius: 18px; box-shadow: var(--elevation); overflow: hidden; }
+  .card{
+    background: rgba(255,255,255,0.62); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255,255,255,0.55); border-radius: 18px; box-shadow: var(--elevation); overflow: hidden;
+  }
   .row{ display: flex; align-items: center; justify-content: space-between; padding: 9px 14px; min-height: 20px; }
   .row + .row{ border-top: 0.5px solid var(--hairline); }
   .row .k{ color: var(--text-secondary); font-size: 15px; }
   .row .v{ font-size: 15px; font-weight: 590; text-align: right; font-variant-numeric: tabular-nums; }
 
-  .status-card{ background: var(--card); border-radius: 22px; box-shadow: var(--elevation); padding: 18px; margin-bottom: 14px; }
+  .status-card{
+    background: rgba(255,255,255,0.62); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255,255,255,0.55); border-radius: 22px; box-shadow: var(--elevation); padding: 18px; margin-bottom: 14px;
+  }
   .status-top{ display: flex; align-items: baseline; gap: 8px; }
   .status-dot{ width: 8px; height: 8px; border-radius: 50%; background: var(--text-secondary); flex-shrink: 0; align-self: center; }
   .status-card.charging .status-dot{ background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent); }
@@ -189,7 +197,10 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238E8E93' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat; background-position: right 10px center;
   }
-  .totals-card{ background: var(--card); border-radius: 18px; box-shadow: var(--elevation); padding: 16px; margin-bottom: 16px; }
+  .totals-card{
+    background: rgba(255,255,255,0.62); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255,255,255,0.55); border-radius: 18px; box-shadow: var(--elevation); padding: 16px; margin-bottom: 16px;
+  }
   .totals-hero{ font-size: 30px; font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
   .totals-hero-sub{ font-size: 13px; color: var(--text-secondary); margin: 2px 0 12px; }
   .totals-grid{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
@@ -447,17 +458,14 @@
 </div>
 
 <div class="tab-bar">
-  <button class="tab-bar-btn active" data-tab="status">
+  <button class="tab-bar-btn active" data-tab="status" aria-label="Status">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-    <span>Status</span>
   </button>
-  <button class="tab-bar-btn" data-tab="history">
+  <button class="tab-bar-btn" data-tab="history" aria-label="History">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
-    <span>History</span>
   </button>
-  <button class="tab-bar-btn" data-tab="settings">
+  <button class="tab-bar-btn" data-tab="settings" aria-label="Settings">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.6 1z"/></svg>
-    <span>Settings</span>
   </button>
 </div>
 
