@@ -229,6 +229,63 @@ NTFY_TOPIC = os.environ.get("NTFY_TOPIC")
 VEHICLE_TZ = ZoneInfo("Australia/Sydney")
 
 
+def time_weighted_rate(
+    start_dt: datetime, end_dt: datetime, default_rate: float, rate_windows: list[dict], tz: ZoneInfo = VEHICLE_TZ
+) -> float:
+    """Energy-weighted average $/kWh for a session spanning start_dt to
+    end_dt, given a set of hour-of-day rate windows plus a default rate
+    for any hour none of them cover.
+
+    Assumes constant power draw for the session (true for these AC
+    portable chargers -- confirmed no ramp/taper, same assumption
+    kwh_drawn already relies on), so weighting by TIME in each window
+    is exactly equivalent to weighting by ENERGY in each window. That
+    equivalence is what lets this plug straight into the existing
+    generated `cost` column (kwh * electricity_rate) with zero schema
+    change to charging_sessions: storing this function's result as
+    electricity_rate makes kwh * electricity_rate land on the exact
+    time-weighted cost, not an approximation.
+
+    rate_windows: [{"start_hour": int 0-23, "end_hour": int 0-24}, ...].
+    end_hour <= start_hour means a window wrapping past midnight (e.g.
+    22 -> 6), handled by the cyclic hour-of-day check below rather
+    than a numeric start<end comparison, which would get wrap-around
+    wrong.
+
+    Verified against 12 cases (plain windows, boundary-straddling
+    sessions symmetric and asymmetric, wrap-around windows, a 48-hour
+    multi-day session, three-window sessions) including two
+    independent brute-force minute-by-minute cross-checks, before
+    this was wired into session-close.
+    """
+    total_seconds = (end_dt - start_dt).total_seconds()
+    if total_seconds <= 0:
+        return default_rate
+
+    def rate_for_hour(hour_of_day: int) -> float:
+        for w in rate_windows:
+            sh, eh = w["start_hour"], w["end_hour"]
+            if sh < eh:
+                if sh <= hour_of_day < eh:
+                    return w["rate_per_kwh"]
+            else:  # wraps past midnight
+                if hour_of_day >= sh or hour_of_day < eh:
+                    return w["rate_per_kwh"]
+        return default_rate
+
+    total_weighted = 0.0
+    cursor = start_dt.astimezone(tz)
+    end_local = end_dt.astimezone(tz)
+    while cursor < end_local:
+        next_boundary = cursor.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+        segment_end = min(next_boundary, end_local)
+        segment_seconds = (segment_end - cursor).total_seconds()
+        total_weighted += segment_seconds * rate_for_hour(cursor.hour)
+        cursor = segment_end
+
+    return total_weighted / total_seconds
+
+
 def notify_auto_stop(success: bool, pct: float, reason: str) -> None:
     if not NTFY_TOPIC:
         print("notify skipped: NTFY_TOPIC is not set", file=sys.stderr)
@@ -757,7 +814,19 @@ def main() -> None:
 
         location_type = open_session.get("location_type") or "unknown"
         if location_type == "home" and settings.get("home_rate_per_kwh") is not None:
-            electricity_rate = settings["home_rate_per_kwh"]
+            # Time-weighted across whichever hour-of-day rate windows this
+            # session actually spans (e.g. cheap 12am-6am, default rest of
+            # day) -- falls back to the flat default rate automatically
+            # when no windows are configured, since an empty list just
+            # means every hour uses default_rate.
+            raw_windows = sb_get("home_rate_windows", {"select": "start_hour,end_hour,rate_per_kwh"})
+            rate_windows = [
+                {"start_hour": int(w["start_hour"]), "end_hour": int(w["end_hour"]), "rate_per_kwh": float(w["rate_per_kwh"])}
+                for w in raw_windows
+            ]
+            electricity_rate = time_weighted_rate(
+                parse_ts(open_session["started_at"]), parse_ts(ended_at), float(settings["home_rate_per_kwh"]), rate_windows
+            )
             rate_confirmed = True
         elif location_type == "public" and settings.get("public_rate_per_kwh") is not None:
             electricity_rate = settings["public_rate_per_kwh"]

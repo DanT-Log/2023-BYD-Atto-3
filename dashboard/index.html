@@ -420,9 +420,18 @@
       <div class="group">
         <div class="group-header">Rates</div>
         <div class="card">
-          <div class="settings-row"><label>Home ($/kWh)</label><input type="number" step="0.01" min="0" id="s-home-rate"></div>
+          <div class="settings-row"><label>Home default ($/kWh)</label><input type="number" step="0.01" min="0" id="s-home-rate"></div>
           <div class="settings-row"><label>Public ($/kWh)</label><input type="number" step="0.01" min="0" id="s-public-rate"></div>
         </div>
+      </div>
+
+      <div class="group">
+        <div class="group-header">Home rate windows</div>
+        <div class="card" id="rate-windows-list"></div>
+        <div class="btn-row" style="margin-top:10px;">
+          <button class="btn btn-secondary" id="add-rate-window-btn">+ Add window</button>
+        </div>
+        <div class="note">Hours not covered by a window use the home default rate above. A window can wrap past midnight, e.g. start 22, end 6. Cost is split across whichever windows a session actually spans.</div>
       </div>
 
       <div class="group">
@@ -1086,12 +1095,14 @@ document.getElementById('detail-back-btn').addEventListener('click', () => {
 // SETTINGS
 // ============================================================
 let chargersCache = [];
+let rateWindowsCache = [];
 
 async function loadSettingsForm() {
   try {
-    const [settingsRows, chargers] = await Promise.all([
+    const [settingsRows, chargers, rateWindows] = await Promise.all([
       sb('tracker_settings_public?select=*'),
       sb('chargers?select=*&order=id.asc'),
+      sb('home_rate_windows?select=*&order=start_hour.asc'),
     ]);
     const s = settingsRows[0] || {};
     document.getElementById('s-interval').value = String(s.poll_interval_minutes ?? 5);
@@ -1115,6 +1126,8 @@ async function loadSettingsForm() {
 
     chargersCache = chargers;
     renderChargersList();
+    rateWindowsCache = rateWindows;
+    renderRateWindowsList();
   } catch (err) {
     console.error('settings load failed', err);
   }
@@ -1151,6 +1164,40 @@ async function deleteCharger(idx) {
   if (!r.ok) { toast('Could not remove charger.'); return; }
   chargersCache.splice(idx, 1);
   renderChargersList();
+}
+
+function renderRateWindowsList() {
+  const list = document.getElementById('rate-windows-list');
+  if (rateWindowsCache.length === 0) { list.innerHTML = `<div class="empty-state">No windows set -- the home default rate applies all day.</div>`; return; }
+  list.innerHTML = rateWindowsCache.map((w, i) => `
+    <div class="charger-row" data-idx="${i}">
+      <input type="number" class="rw-start" min="0" max="23" value="${w.start_hour}" placeholder="Start hr">
+      <input type="number" class="rw-end" min="0" max="24" value="${w.end_hour}" placeholder="End hr">
+      <input type="number" class="rw-rate" step="0.01" min="0" value="${w.rate_per_kwh}" placeholder="$/kWh">
+      <button class="c-delete" aria-label="Delete">✕</button>
+    </div>
+  `).join('');
+  list.querySelectorAll('.c-delete').forEach(btn => {
+    btn.addEventListener('click', () => deleteRateWindow(parseInt(btn.closest('.charger-row').dataset.idx, 10)));
+  });
+}
+
+document.getElementById('add-rate-window-btn').addEventListener('click', async () => {
+  const passkey = localStorage.getItem(PASSKEY_STORAGE_KEY);
+  const r = await fn('edit-rate-windows', { passkey, action: 'add', start_hour: 0, end_hour: 6, rate_per_kwh: 0.08 });
+  if (!r.ok) { toast(r.data.error || 'Could not add window.'); return; }
+  rateWindowsCache.push(r.data.window);
+  renderRateWindowsList();
+});
+
+async function deleteRateWindow(idx) {
+  const w = rateWindowsCache[idx];
+  if (!confirm(`Remove the ${w.start_hour}:00\u2013${w.end_hour}:00 window?`)) return;
+  const passkey = localStorage.getItem(PASSKEY_STORAGE_KEY);
+  const r = await fn('edit-rate-windows', { passkey, action: 'delete', id: w.id });
+  if (!r.ok) { toast('Could not remove window.'); return; }
+  rateWindowsCache.splice(idx, 1);
+  renderRateWindowsList();
 }
 
 document.getElementById('use-location-btn').addEventListener('click', () => {
@@ -1202,13 +1249,30 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     if (!res.ok) { statusEl.textContent = res.data.error || 'Save failed.'; statusEl.className = 'save-status error'; return; }
 
     // Chargers: save every row's current name/kW against the cached list.
+    // Scoped to #chargers-list specifically -- rate-window rows below share
+    // the same .charger-row class but live in a different container.
     for (let i = 0; i < chargersCache.length; i++) {
-      const row = document.querySelectorAll('.charger-row')[i];
+      const row = document.querySelectorAll('#chargers-list .charger-row')[i];
       const name = row.querySelector('.c-name').value.trim();
       const kw = parseFloat(row.querySelector('.c-kw').value);
       if (!name || !Number.isFinite(kw)) continue;
       if (name !== chargersCache[i].name || kw !== Number(chargersCache[i].draw_kw)) {
         await fn('edit-chargers', { passkey, action: 'update', id: chargersCache[i].id, name, draw_kw: kw });
+      }
+    }
+
+    // Rate windows: same pattern, save every row's current start/end/rate
+    // against the cached list, scoped to #rate-windows-list.
+    for (let i = 0; i < rateWindowsCache.length; i++) {
+      const row = document.querySelectorAll('#rate-windows-list .charger-row')[i];
+      const startHour = parseInt(row.querySelector('.rw-start').value, 10);
+      const endHour = parseInt(row.querySelector('.rw-end').value, 10);
+      const rate = parseFloat(row.querySelector('.rw-rate').value);
+      if (!Number.isInteger(startHour) || !Number.isInteger(endHour) || !Number.isFinite(rate)) continue;
+      const w = rateWindowsCache[i];
+      if (startHour !== w.start_hour || endHour !== w.end_hour || rate !== Number(w.rate_per_kwh)) {
+        const r = await fn('edit-rate-windows', { passkey, action: 'update', id: w.id, start_hour: startHour, end_hour: endHour, rate_per_kwh: rate });
+        if (!r.ok) { statusEl.textContent = r.data.error || 'A rate window failed to save.'; statusEl.className = 'save-status error'; return; }
       }
     }
 
