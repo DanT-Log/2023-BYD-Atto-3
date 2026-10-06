@@ -555,6 +555,8 @@
 const SUPABASE_URL = "https://ujpcabmacpnbtyiharnk.supabase.co";
 const SUPABASE_KEY = "sb_publishable_MYvAXGlFH-AyOkGU-FceYg_THPLZqCy";
 const PASSKEY_STORAGE_KEY = "atto3_app_passkey";
+const PASSKEY_SAVED_AT_KEY = "atto3_app_passkey_saved_at";
+const PASSKEY_EXPIRY_MS = 24 * 60 * 60 * 1000; // remembered unlock expires a day after it was entered
 
 async function sb(path) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -634,13 +636,20 @@ function showPasskeyModal(msg) {
 }
 async function getPasskey(errorMsg) {
   const stored = localStorage.getItem(PASSKEY_STORAGE_KEY);
-  if (stored && !errorMsg) return stored;
+  const savedAt = Number(localStorage.getItem(PASSKEY_SAVED_AT_KEY));
+  const expired = !savedAt || (Date.now() - savedAt) > PASSKEY_EXPIRY_MS;
+  if (stored && !expired && !errorMsg) return stored;
+  if (stored && expired) clearStoredPasskey(); // stale -- force a fresh entry rather than silently reusing it
   const entered = await showPasskeyModal(errorMsg);
   if (!entered) return null;
   localStorage.setItem(PASSKEY_STORAGE_KEY, entered);
+  localStorage.setItem(PASSKEY_SAVED_AT_KEY, String(Date.now()));
   return entered;
 }
-function clearStoredPasskey() { localStorage.removeItem(PASSKEY_STORAGE_KEY); }
+function clearStoredPasskey() {
+  localStorage.removeItem(PASSKEY_STORAGE_KEY);
+  localStorage.removeItem(PASSKEY_SAVED_AT_KEY);
+}
 
 async function verifyPasskeyServer(passkey) {
   const r = await fn('verify-passkey', { passkey });
