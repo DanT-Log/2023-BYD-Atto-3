@@ -131,7 +131,22 @@
   .idle-range{ font-size: 54px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
   .idle-range .unit{ font-size: 22px; font-weight: 500; color: var(--text-secondary); margin-left: 5px; }
   .idle-sub{ font-size: 13px; color: var(--text-secondary); margin-top: 7px; }
-  .idle-car-illustration{ width: 100%; max-width: 320px; margin: 10px auto -6px; display: block; }
+  .car-illustration{ width: 100%; max-width: 320px; margin: 10px auto -6px; display: block; }
+
+  /* A second, thinner dashed ring that visibly travels around the gauge
+     while actively charging -- the existing breathing glow reads as
+     "this is live" but not "energy is flowing right now"; this does. */
+  .gauge-flow{
+    fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round;
+    stroke-dasharray: 3 9; opacity: 0;
+  }
+  @keyframes gauge-flow-rotate{ to { stroke-dashoffset: -2400; } }
+  .status-card.charging .gauge-flow{
+    opacity: 0.8; animation: gauge-flow-rotate 18s linear infinite;
+  }
+  @media (prefers-reduced-motion: reduce){
+    .status-card.charging .gauge-flow{ animation: none; opacity: 0.4; }
+  }
   .status-grid{ display: grid; grid-template-columns: 1fr 1fr; gap: 14px 10px; }
   .stat{ display: flex; flex-direction: column; gap: 2px; }
   .stat .label{ font-size: 12px; color: var(--text-secondary); }
@@ -346,6 +361,7 @@
             <line x1="70.64" y1="9.65" x2="69.41" y2="5.85" class="gauge-tick"/>
             <line x1="129.36" y1="9.65" x2="130.59" y2="5.85" class="gauge-tick"/>
             <line x1="176.86" y1="44.16" x2="180.09" y2="41.81" class="gauge-tick"/>
+            <circle class="gauge-flow" id="gauge-flow" cx="100" cy="100" r="88"></circle>
           </svg>
           <div class="gauge-center">
             <div class="gauge-pct num" id="gauge-pct">—</div>
@@ -358,8 +374,9 @@
       <div class="idle-hero" id="idle-hero" style="display:none;">
         <div class="idle-range num" id="idle-range">—<span class="unit">km</span></div>
         <div class="idle-sub">BYD Atto 3 &middot; <span id="idle-pct"></span>% battery</div>
-        <img src="atto3-illustration.png" alt="BYD Atto 3" class="idle-car-illustration">
       </div>
+
+      <img src="atto3-illustration.png" alt="BYD Atto 3" class="car-illustration">
 
       <div class="panel-divider" id="session-divider" style="display:none;"></div>
       <div id="open-session-group" style="display:none;">
@@ -761,6 +778,11 @@ function renderStatus(snap, settings, openSession) {
 
   card.classList.toggle('charging', !!(snap && snap.is_charging));
   card.classList.toggle('starting', starting);
+
+  // No point offering to start a charge that's already starting or
+  // already happening -- only show this when genuinely idle.
+  document.getElementById('btn-session').style.display =
+    (starting || (snap && snap.is_charging)) ? 'none' : 'flex';
 
   // The data column beside the gauge is always populated, whatever the
   // state -- an empty gap next to a ring reads worse than a short,
