@@ -225,6 +225,42 @@ def classify_location(lat: float | None, lon: float | None, settings: dict) -> s
     return "home" if distance <= settings["home_radius_m"] else "public"
 
 
+def reverse_geocode(lat: float | None, lon: float | None) -> str | None:
+    """Human-readable "Suburb, State" for a coordinate, via OpenStreetMap's
+    free Nominatim API. Called once per session (at most a few times a
+    day), nowhere near Nominatim's 1-request/second usage-policy limit.
+    A descriptive User-Agent is required by that policy -- a missing one
+    returns a 403, not just a stylistic nicety. Never raises: a failed
+    geocode just means a null label, which the UI already falls back to
+    coordinates for -- this isn't allowed to block session recording.
+    """
+    if lat is None or lon is None:
+        return None
+    try:
+        resp = requests.get(
+            "https://nominatim.openstreetmap.org/reverse",
+            params={"lat": lat, "lon": lon, "format": "jsonv2", "zoom": 14, "addressdetails": 1},
+            headers={"User-Agent": "byd-atto3-charging-tracker/1.0 (personal project)"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        addr = resp.json().get("address", {})
+        locality = addr.get("suburb") or addr.get("town") or addr.get("city") or addr.get("village")
+        state = addr.get("state")
+        au_state_abbrev = {
+            "New South Wales": "NSW", "Victoria": "VIC", "Queensland": "QLD",
+            "Western Australia": "WA", "South Australia": "SA", "Tasmania": "TAS",
+            "Australian Capital Territory": "ACT", "Northern Territory": "NT",
+        }
+        state = au_state_abbrev.get(state, state)
+        if locality and state:
+            return f"{locality}, {state}"
+        return locality or state
+    except Exception as exc:
+        print(f"reverse_geocode failed (non-fatal): {exc}")
+        return None
+
+
 NTFY_TOPIC = os.environ.get("NTFY_TOPIC")
 VEHICLE_TZ = ZoneInfo("Australia/Sydney")
 
@@ -774,6 +810,7 @@ def main() -> None:
                 "start_latitude": state["latitude"],
                 "start_longitude": state["longitude"],
                 "location_type": location_type,
+                "location_label": reverse_geocode(state["latitude"], state["longitude"]),
             },
         )
         print(f"charging session opened ({location_type})")

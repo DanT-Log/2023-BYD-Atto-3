@@ -507,6 +507,9 @@
       History
     </button>
     <div id="session-detail-content"></div>
+    <div class="note" id="osm-attribution" style="display:none; text-align:center;">
+      Location data &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors
+    </div>
   </div>
 </div>
 
@@ -1119,6 +1122,7 @@ async function showSessionDetail(sessions, idx) {
       <div class="row"><span class="k">Location</span><span class="v" id="detail-location">${appUnlocked ? 'Loading…' : (s.location_type === 'home' ? 'Home 🔒' : s.location_type === 'public' ? 'Public 🔒' : 'Unknown')}</span></div>
     </div>
   `;
+  document.getElementById('osm-attribution').style.display = 'none';
 
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-session-detail').classList.add('active');
@@ -1130,8 +1134,13 @@ async function showSessionDetail(sessions, idx) {
     const loc = r.ok ? r.data.sessions?.[s.id] : null;
     const target = document.getElementById('detail-location');
     if (target) {
-      target.textContent = (loc && loc.start_latitude != null)
-        ? `${loc.start_latitude.toFixed(5)}, ${loc.start_longitude.toFixed(5)}` : (s.location_type === 'home' ? 'Home' : 'Public');
+      // Prefer the human-readable label (e.g. "Villawood, NSW"); fall back
+      // to raw coordinates for sessions recorded before this existed, then
+      // to the plain Home/Public type as the last resort.
+      target.textContent = loc?.location_label
+        || (loc && loc.start_latitude != null ? `${loc.start_latitude.toFixed(5)}, ${loc.start_longitude.toFixed(5)}` : null)
+        || (s.location_type === 'home' ? 'Home' : 'Public');
+      document.getElementById('osm-attribution').style.display = loc?.location_label ? 'block' : 'none';
     }
   }
 }
