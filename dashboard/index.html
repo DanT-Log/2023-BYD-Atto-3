@@ -141,8 +141,12 @@
      painting above the card rather than being hidden behind it
      (without z-index, later-in-DOM elements like the card would
      paint over earlier ones in the overlapping region). */
+  /* The tire-bottom sits at 99.15% of the image's height (measured
+     directly from the pixel data, ~2px of transparent margin below
+     the tires at full resolution) -- -2px here lands the visible
+     tires right at the card's edge, not sunk into it. */
   .car-illustration{
-    width: 62%; max-width: 230px; margin: 0 auto -10px; display: block;
+    width: 62%; max-width: 230px; margin: 0 auto -2px; display: block;
     position: relative; z-index: 2;
   }
   .stat{ display: flex; flex-direction: column; gap: 2px; }
