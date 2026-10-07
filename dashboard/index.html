@@ -123,6 +123,15 @@
   .hero-stat{ display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
   .hero-stat .k{ font-size: 12.5px; color: var(--text-secondary); white-space: nowrap; }
   .hero-stat .v{ font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; }
+
+  /* Idle state leads with range instead of the gauge -- matches the
+     reference pattern where the big hero number carries the moment
+     when there's no live charging happening to animate. */
+  .idle-hero{ text-align: center; padding: 6px 0 0; }
+  .idle-range{ font-size: 54px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+  .idle-range .unit{ font-size: 22px; font-weight: 500; color: var(--text-secondary); margin-left: 5px; }
+  .idle-sub{ font-size: 13px; color: var(--text-secondary); margin-top: 7px; }
+  .idle-car-illustration{ width: 100%; max-width: 320px; margin: 10px auto -6px; display: block; }
   .status-grid{ display: grid; grid-template-columns: 1fr 1fr; gap: 14px 10px; }
   .stat{ display: flex; flex-direction: column; gap: 2px; }
   .stat .label{ font-size: 12px; color: var(--text-secondary); }
@@ -322,7 +331,7 @@
         <div class="status-updated" id="status-sub"></div>
       </div>
 
-      <div class="hero-row">
+      <div class="hero-row" id="hero-row">
         <div class="gauge-wrap">
           <svg class="gauge" viewBox="0 0 200 200" aria-hidden="true">
             <circle class="gauge-track" cx="100" cy="100" r="88"></circle>
@@ -344,6 +353,12 @@
           </div>
         </div>
         <div class="hero-data" id="status-grid"></div>
+      </div>
+
+      <div class="idle-hero" id="idle-hero" style="display:none;">
+        <div class="idle-range num" id="idle-range">—<span class="unit">km</span></div>
+        <div class="idle-sub">BYD Atto 3 &middot; <span id="idle-pct"></span>% battery</div>
+        <img src="atto3-illustration.png" alt="BYD Atto 3" class="idle-car-illustration">
       </div>
 
       <div class="panel-divider" id="session-divider" style="display:none;"></div>
@@ -728,6 +743,12 @@ function freshness(recordedAt) {
 }
 function heroRow(k, v) { return `<div class="hero-stat"><span class="k">${k}</span><span class="v">${v}</span></div>`; }
 
+function showHero(which) {
+  // 'gauge' or 'idle' -- the two hero sections are mutually exclusive.
+  document.getElementById('hero-row').style.display = which === 'gauge' ? 'flex' : 'none';
+  document.getElementById('idle-hero').style.display = which === 'idle' ? 'block' : 'none';
+}
+
 function renderStatus(snap, settings, openSession) {
   const card = document.getElementById('status-card');
   const label = document.getElementById('status-label');
@@ -745,18 +766,21 @@ function renderStatus(snap, settings, openSession) {
   // state -- an empty gap next to a ring reads worse than a short,
   // honest row explaining why there's nothing more to show yet.
   if (!snap) {
+    showHero('gauge');
     label.textContent = 'No data yet';
     updated.textContent = '';
     gaugePct.textContent = '—';
     setGauge(0, 'var(--hairline)');
     grid.innerHTML = heroRow('Status', 'Waiting for first check');
   } else if (starting) {
+    showHero('gauge');
     label.textContent = 'Starting';
     updated.textContent = freshness(snap.recorded_at);
     gaugePct.innerHTML = `${Math.round(snap.battery_pct)}<span>%</span>`;
     setGauge(snap.battery_pct, 'var(--orange)');
     grid.innerHTML = heroRow('Status', 'Confirming with the car…');
   } else if (snap.is_charging) {
+    showHero('gauge');
     label.textContent = 'Charging';
     updated.textContent = freshness(snap.recorded_at);
     gaugePct.innerHTML = `${Math.round(snap.battery_pct)}<span>%</span>`;
@@ -767,11 +791,16 @@ function renderStatus(snap, settings, openSession) {
       heroRow('Speed', snap.charging_power_kw != null ? snap.charging_power_kw.toFixed(1) + ' kW' : '—') +
       heroRow('Time to full', timeToFull);
   } else {
+    // Idle: range leads as the big hero number instead of the gauge,
+    // with the car illustration underneath -- matches the reference
+    // pattern of giving the idle state its own moment rather than
+    // just being "the charging screen minus the exciting part".
+    showHero('idle');
     label.textContent = 'Not charging';
     updated.textContent = freshness(snap.recorded_at);
-    gaugePct.innerHTML = `${Math.round(snap.battery_pct)}<span>%</span>`;
-    setGauge(snap.battery_pct, 'var(--text-secondary)');
-    grid.innerHTML = snap.range_km != null ? heroRow('Range', Math.round(snap.range_km) + ' km') : heroRow('Range', '—');
+    document.getElementById('idle-range').innerHTML =
+      (snap.range_km != null ? Math.round(snap.range_km) : '—') + '<span class="unit">km</span>';
+    document.getElementById('idle-pct').textContent = Math.round(snap.battery_pct);
   }
 
   renderOpenSession(openSession, snap, settings);
