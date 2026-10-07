@@ -103,7 +103,7 @@
     display: flex; justify-content: space-between; margin-top: 7px; font-size: 12.5px;
     color: var(--text-secondary); font-weight: 590;
   }
-  .status-top{ display: flex; align-items: baseline; gap: 8px; }
+  .status-top{ display: flex; align-items: baseline; gap: 8px; margin-bottom: 16px; }
   .status-dot{ width: 8px; height: 8px; border-radius: 50%; background: var(--text-secondary); flex-shrink: 0; align-self: center; }
   .status-card.charging .status-dot{ background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent); }
   .status-card.starting .status-dot{ background: var(--orange); box-shadow: 0 0 0 4px color-mix(in srgb, var(--orange) 20%, transparent); }
@@ -123,7 +123,7 @@
   /* Charging stats sit under the bar as a row of three, not beside a
      gauge -- the bar at the top already carries the charge level, no
      need for a second shape showing the same number again. */
-  .charge-stats-row{ display: flex; gap: 10px; margin-top: 4px; }
+  .charge-stats-row{ display: flex; gap: 10px; margin-top: 16px; }
   .charge-stats-row .hero-stat{ flex: 1; display: flex; flex-direction: column; gap: 3px; }
   .charge-stats-row .hero-stat .k{ font-size: 11.5px; color: var(--text-secondary); white-space: nowrap; }
   .charge-stats-row .hero-stat .v{ font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; }
