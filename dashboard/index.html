@@ -1134,12 +1134,14 @@ async function showSessionDetail(sessions, idx) {
     const loc = r.ok ? r.data.sessions?.[s.id] : null;
     const target = document.getElementById('detail-location');
     if (target) {
-      // Prefer the human-readable label (e.g. "Villawood, NSW"); fall back
-      // to raw coordinates for sessions recorded before this existed, then
-      // to the plain Home/Public type as the last resort.
-      target.textContent = loc?.location_label
-        || (loc && loc.start_latitude != null ? `${loc.start_latitude.toFixed(5)}, ${loc.start_longitude.toFixed(5)}` : null)
-        || (s.location_type === 'home' ? 'Home' : 'Public');
+      // Category (Home/Public) and specific place shown together, not as
+      // alternatives -- the specific part prefers the human-readable label
+      // (e.g. "Villawood, NSW"), falling back to raw coordinates for
+      // sessions recorded before that existed.
+      const category = s.location_type === 'home' ? 'Home' : s.location_type === 'public' ? 'Public' : null;
+      const specific = loc?.location_label
+        || (loc && loc.start_latitude != null ? `${loc.start_latitude.toFixed(5)}, ${loc.start_longitude.toFixed(5)}` : null);
+      target.textContent = category && specific ? `${category} · ${specific}` : (specific || category || 'Unknown');
       document.getElementById('osm-attribution').style.display = loc?.location_label ? 'block' : 'none';
     }
   }
