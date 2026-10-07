@@ -71,6 +71,32 @@
     background: linear-gradient(165deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 45%), rgba(255,255,255,0.8); -webkit-backdrop-filter: blur(24px) saturate(200%); backdrop-filter: blur(24px) saturate(200%);
     border: 1px solid rgba(255,255,255,0.55); border-radius: 22px; box-shadow: var(--elevation); padding: 18px; margin-bottom: 14px;
   }
+  /* Horizontal charging bar at the top of the card -- a second,
+     complementary read of the same charge level to the gauge, shown
+     only while actively charging (matches the reference's placement
+     and intent: the first thing your eye hits on the screen). */
+  .charge-bar-wrap{ margin-bottom: 16px; }
+  .charge-bar-track{
+    position: relative; height: 10px; border-radius: 999px; background: var(--segment-track); overflow: hidden;
+  }
+  .charge-bar-fill{
+    position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--accent);
+    width: 0%; transition: width .7s cubic-bezier(.3,.8,.4,1); overflow: hidden;
+  }
+  .charge-bar-fill::after{
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,0.55) 48%, transparent 66%);
+    background-size: 220% 100%; animation: charge-bar-shimmer 2.2s linear infinite;
+  }
+  @keyframes charge-bar-shimmer{ from { background-position: 160% 0; } to { background-position: -160% 0; } }
+  @media (prefers-reduced-motion: reduce){ .charge-bar-fill::after{ animation: none; } }
+  .charge-bar-limit-marker{
+    position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); border-radius: 1px;
+  }
+  .charge-bar-labels{
+    display: flex; justify-content: space-between; margin-top: 7px; font-size: 12.5px;
+    color: var(--text-secondary); font-weight: 590;
+  }
   .status-top{ display: flex; align-items: baseline; gap: 8px; }
   .status-dot{ width: 8px; height: 8px; border-radius: 50%; background: var(--text-secondary); flex-shrink: 0; align-self: center; }
   .status-card.charging .status-dot{ background: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent); }
@@ -340,6 +366,17 @@
   <!-- ============ STATUS ============ -->
   <div class="panel active" id="panel-status">
     <div class="status-card" id="status-card">
+      <div class="charge-bar-wrap" id="charge-bar-wrap" style="display:none;">
+        <div class="charge-bar-track">
+          <div class="charge-bar-fill" id="charge-bar-fill"></div>
+          <div class="charge-bar-limit-marker" id="charge-bar-limit-marker" style="display:none;"></div>
+        </div>
+        <div class="charge-bar-labels">
+          <span id="charge-bar-pct" class="num">—%</span>
+          <span id="charge-bar-limit-label" class="num"></span>
+        </div>
+      </div>
+
       <div class="status-top">
         <div class="status-dot"></div>
         <div class="status-label" id="status-label">Loading…</div>
@@ -766,12 +803,34 @@ function showHero(which) {
   document.getElementById('idle-hero').style.display = which === 'idle' ? 'block' : 'none';
 }
 
+function renderChargeBar(batteryPct, settings) {
+  document.getElementById('charge-bar-wrap').style.display = 'block';
+  document.getElementById('charge-bar-fill').style.width = `${Math.max(0, Math.min(100, batteryPct))}%`;
+  document.getElementById('charge-bar-pct').textContent = `${Math.round(batteryPct)}%`;
+
+  const marker = document.getElementById('charge-bar-limit-marker');
+  const limitLabel = document.getElementById('charge-bar-limit-label');
+  if (settings.pct_limit_enabled && settings.auto_stop_at_pct != null) {
+    const limitPct = Number(settings.auto_stop_at_pct);
+    marker.style.display = 'block';
+    marker.style.left = `${Math.max(0, Math.min(100, limitPct))}%`;
+    limitLabel.textContent = `Limit ${Math.round(limitPct)}%`;
+  } else {
+    marker.style.display = 'none';
+    limitLabel.textContent = '';
+  }
+}
+
 function renderStatus(snap, settings, openSession) {
   const card = document.getElementById('status-card');
   const label = document.getElementById('status-label');
   const updated = document.getElementById('status-sub');
   const grid = document.getElementById('status-grid');
   const gaugePct = document.getElementById('gauge-pct');
+
+  // The bar is charging-specific -- hidden by default every render, the
+  // one branch that needs it turns it back on explicitly.
+  document.getElementById('charge-bar-wrap').style.display = 'none';
 
   const starting = !!settings.start_requested_at && !(snap && snap.is_charging)
     && (!settings.fast_until || new Date(settings.fast_until).getTime() > Date.now());
@@ -807,6 +866,7 @@ function renderStatus(snap, settings, openSession) {
     updated.textContent = freshness(snap.recorded_at);
     gaugePct.innerHTML = `${Math.round(snap.battery_pct)}<span>%</span>`;
     setGauge(snap.battery_pct, 'var(--accent)');
+    renderChargeBar(snap.battery_pct, settings);
     const timeToFull = (snap.remaining_hours != null && snap.remaining_minutes != null)
       ? `${snap.remaining_hours}h ${snap.remaining_minutes}m` : '—';
     grid.innerHTML =
