@@ -135,7 +135,16 @@
   .idle-range{ font-size: 54px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
   .idle-range .unit{ font-size: 22px; font-weight: 500; color: var(--text-secondary); margin-left: 5px; }
   .idle-sub{ font-size: 13px; color: var(--text-secondary); margin-top: 7px; }
-  .car-illustration{ width: 100%; max-width: 320px; margin: 10px auto -6px; display: block; }
+  /* Floats in the gap between the header and the card, riding the
+     card's top edge -- a negative bottom margin pulls the card up
+     underneath it, and the explicit stacking context keeps the car
+     painting above the card rather than being hidden behind it
+     (without z-index, later-in-DOM elements like the card would
+     paint over earlier ones in the overlapping region). */
+  .car-illustration{
+    width: 62%; max-width: 230px; margin: 0 auto -24px; display: block;
+    position: relative; z-index: 2;
+  }
   .stat{ display: flex; flex-direction: column; gap: 2px; }
   .stat .label{ font-size: 12px; color: var(--text-secondary); }
   .stat .value{ font-size: 19px; font-weight: 650; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
@@ -327,6 +336,7 @@
 
   <!-- ============ STATUS ============ -->
   <div class="panel active" id="panel-status">
+    <img src="atto3-illustration.png" alt="BYD Atto 3" class="car-illustration">
     <div class="status-card" id="status-card">
       <div class="charge-bar-wrap" id="charge-bar-wrap" style="display:none;">
         <div class="charge-bar-track">
@@ -351,8 +361,6 @@
         <div class="idle-range num" id="idle-range">—<span class="unit">km</span></div>
         <div class="idle-sub">BYD Atto 3 &middot; <span id="idle-pct"></span>% battery</div>
       </div>
-
-      <img src="atto3-illustration.png" alt="BYD Atto 3" class="car-illustration">
 
       <div class="panel-divider" id="session-divider" style="display:none;"></div>
       <div id="open-session-group" style="display:none;">
