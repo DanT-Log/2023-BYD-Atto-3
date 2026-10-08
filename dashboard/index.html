@@ -362,8 +362,8 @@
       <div class="charge-stats-row" id="charge-stats-row" style="display:none;"></div>
 
       <div class="idle-hero" id="idle-hero" style="display:none;">
-        <div class="idle-range num" id="idle-range">—<span class="unit">km</span></div>
-        <div class="idle-sub">BYD Atto 3 &middot; <span id="idle-pct"></span>% battery</div>
+        <div class="idle-range num" id="idle-pct-hero">—<span class="unit">%</span></div>
+        <div class="idle-sub">BYD Atto 3 &middot; <span id="idle-range-sub"></span> km range</div>
       </div>
 
       <div class="panel-divider" id="session-divider" style="display:none;"></div>
@@ -815,9 +815,9 @@ function renderStatus(snap, settings, openSession) {
     showHero('idle');
     label.textContent = 'Not charging';
     updated.textContent = freshness(snap.recorded_at);
-    document.getElementById('idle-range').innerHTML =
-      (snap.range_km != null ? Math.round(snap.range_km) : '—') + '<span class="unit">km</span>';
-    document.getElementById('idle-pct').textContent = Math.round(snap.battery_pct);
+    document.getElementById('idle-pct-hero').innerHTML =
+      (snap.battery_pct != null ? Math.round(snap.battery_pct) : '—') + '<span class="unit">%</span>';
+    document.getElementById('idle-range-sub').textContent = snap.range_km != null ? Math.round(snap.range_km) : '—';
   }
 
   renderOpenSession(openSession, snap, settings);
