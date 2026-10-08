@@ -1113,6 +1113,7 @@ async function showSessionDetail(sessions, idx) {
       <div class="row"><span class="k">Time</span><span class="v">${fmtTime(s.started_at)} – ${s.ended_at ? fmtTime(s.ended_at) : 'ongoing'}</span></div>
       <div class="row"><span class="k">Duration</span><span class="v">${durationMin != null ? (durationMin < 60 ? durationMin + ' min' : (durationMin / 60).toFixed(1) + ' h') : '—'}</span></div>
       <div class="row"><span class="k">Battery</span><span class="v">${fmtPct(s.start_pct)} → ${fmtPct(s.end_pct)}</span></div>
+      ${s.start_odometer_km != null ? `<div class="row"><span class="k">Odometer</span><span class="v">${Math.round(s.start_odometer_km).toLocaleString()}${s.end_odometer_km != null ? ' → ' + Math.round(s.end_odometer_km).toLocaleString() : ''} km</span></div>` : ''}
       <div class="row"><span class="k">Energy delivered</span><span class="v">${fmtKwh(s.energy_added_kwh)}</span></div>
       ${s.kwh_drawn != null ? `<div class="row"><span class="k">Energy drawn (AC)</span><span class="v">${fmtKwh(s.kwh_drawn)}</span></div>` : ''}
       ${s.charge_efficiency != null ? `<div class="row"><span class="k">Charger efficiency</span><span class="v">${(s.charge_efficiency * 100).toFixed(0)}%</span></div>` : ''}
