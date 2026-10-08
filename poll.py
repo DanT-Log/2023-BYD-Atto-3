@@ -549,11 +549,35 @@ def get_last_full_snapshot() -> dict | None:
     snapshots carry forward so the existing Status page keeps working."""
     rows = sb_get("vehicle_snapshots", {
         "poll_kind": "eq.full",
-        "select": "recorded_at,odometer_km,range_km,car_reported_kwh_per_100km,raw",
+        "select": "recorded_at,odometer_km,range_km,battery_pct,car_reported_kwh_per_100km,raw",
         "order": "recorded_at.desc",
         "limit": "1",
     })
     return rows[0] if rows else None
+
+
+def estimate_range_km(carried_range_km: float | None, carried_battery_pct: float | None, current_battery_pct: float | None) -> float | None:
+    """Scales the last full poll's range by how much battery % has moved
+    since then, instead of showing that stale range unchanged.
+
+    Light polls get a fresh battery_pct every time (from the cloud read)
+    but never a fresh range_km (that only comes from asking the car
+    directly, on a full poll) -- so after the car is DRIVEN (which
+    doesn't trigger a full poll the way a charge starting/ending does),
+    the carried-forward range stays frozen at its pre-drive value while
+    the displayed battery % keeps dropping, visibly wrong on screen.
+    Driving isn't the only cause either: standby loss between full polls
+    has the exact same effect. This doesn't require detecting *why* the
+    percentages diverged, just correcting for the fact that they have.
+
+    Not a substitute for a real reading -- just a better estimate than a
+    flatly frozen number until the next full poll corrects it for real.
+    """
+    if carried_range_km is None or carried_battery_pct is None or current_battery_pct is None:
+        return carried_range_km
+    if carried_battery_pct <= 0:
+        return carried_range_km
+    return carried_range_km * (current_battery_pct / carried_battery_pct)
 
 
 def reason_for_full_update(is_charging: bool | None, open_session: dict | None) -> str | None:
@@ -633,10 +657,11 @@ async def fetch_vehicle_state(mode: str, open_session: dict | None, last_full: d
                 # remaining-time fields.
                 "remaining_hours": charging.full_hour,
                 "remaining_minutes": charging.full_minute,
-                # Carried forward from the last full update so the existing
-                # Status page keeps showing last-known range and vehicle
-                # card; realtime_as_of says how old that is.
-                "range_km": carried.get("range_km"),
+                # Scaled from the last full update's range by how much
+                # battery % has moved since then (see estimate_range_km),
+                # not a flat carry-forward -- realtime_as_of says how old
+                # the underlying full reading is.
+                "range_km": estimate_range_km(carried.get("range_km"), carried.get("battery_pct"), charging.soc),
                 "car_reported_kwh_per_100km": carried.get("car_reported_kwh_per_100km"),
                 "raw": {
                     "realtime": carried_raw.get("realtime"),
