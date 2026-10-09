@@ -425,6 +425,16 @@
 
   <!-- ============ SETTINGS ============ -->
   <div class="panel" id="panel-settings">
+    <div class="group">
+      <div class="group-header">Account</div>
+      <div class="card">
+        <div class="settings-row">
+          <label>Signed in as</label>
+          <span id="account-email" style="color:var(--text-secondary); font-size:14px;"></span>
+        </div>
+      </div>
+      <button class="btn btn-secondary" id="settings-logout-btn" style="width:100%; margin-top:10px;">Log out</button>
+    </div>
     <div id="settings-locked" class="lock-screen">
       <div class="icon">🔒</div>
       <p>Settings are admin-only. Ask an admin to make this change.</p>
@@ -538,12 +548,16 @@
   <div class="modal">
     <h3>Atto 3</h3>
     <p id="login-msg">Sign in to view your charging data.</p>
-    <input type="email" id="login-email" autocomplete="username" placeholder="Email" inputmode="email">
-    <input type="password" id="login-password" autocomplete="current-password" placeholder="Password">
-    <div class="err" id="login-err"></div>
-    <div class="modal-buttons">
-      <button class="modal-confirm" id="login-confirm" style="flex:1;">Log in</button>
-    </div>
+    <!-- A real <form> (not just bare inputs) is what gets Safari/iOS to
+         reliably offer "Save Password" / Face ID autofill afterwards. -->
+    <form id="login-form" autocomplete="on">
+      <input type="email" id="login-email" name="username" autocomplete="username" placeholder="Email" inputmode="email">
+      <input type="password" id="login-password" name="password" autocomplete="current-password" placeholder="Password">
+      <div class="err" id="login-err"></div>
+      <div class="modal-buttons">
+        <button type="submit" class="modal-confirm" id="login-confirm" style="flex:1;">Log in</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -671,11 +685,13 @@ function clearSession() {
   authSession = null;
   localStorage.removeItem(SESSION_STORAGE_KEY);
 }
-function decodeRole(accessToken) {
+function decodeJwtPayload(accessToken) {
   try {
-    const payload = JSON.parse(atob(accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-    return payload?.app_metadata?.role === 'admin' ? 'admin' : 'user';
-  } catch { return 'user'; }
+    return JSON.parse(atob(accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+  } catch { return {}; }
+}
+function decodeRole(accessToken) {
+  return decodeJwtPayload(accessToken)?.app_metadata?.role === 'admin' ? 'admin' : 'user';
 }
 function applyTokenResponse(data) {
   storeSession({
@@ -683,6 +699,7 @@ function applyTokenResponse(data) {
     refresh_token: data.refresh_token,
     expires_at: Date.now() + (data.expires_in * 1000),
     role: decodeRole(data.access_token),
+    email: decodeJwtPayload(data.access_token)?.email || '',
   });
 }
 
@@ -741,15 +758,19 @@ function updateRoleUI() {
   document.getElementById('btn-full').classList.toggle('locked', !admin);
   document.getElementById('settings-locked').style.display = admin ? 'none' : 'block';
   document.getElementById('settings-form').style.display = admin ? 'block' : 'none';
+  document.getElementById('account-email').textContent = authSession?.email || '';
   if (admin) loadSettingsForm();
 }
 
-document.getElementById('logout-btn').addEventListener('click', () => {
+function doLogout() {
   clearSession();
   showLoginScreen();
-});
+}
+document.getElementById('logout-btn').addEventListener('click', doLogout);
+document.getElementById('settings-logout-btn').addEventListener('click', doLogout);
 
-async function onLoginSubmit() {
+async function onLoginSubmit(e) {
+  e.preventDefault(); // a real submit (not just a click handler) is what gets Safari to offer saving the password
   const email = document.getElementById('login-email').value.trim();
   const password = document.getElementById('login-password').value;
   const errEl = document.getElementById('login-err');
@@ -763,8 +784,7 @@ async function onLoginSubmit() {
   updateRoleUI();
   loadStatus();
 }
-document.getElementById('login-confirm').addEventListener('click', onLoginSubmit);
-document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') onLoginSubmit(); });
+document.getElementById('login-form').addEventListener('submit', onLoginSubmit);
 
 async function boot() {
   if (authSession) {
