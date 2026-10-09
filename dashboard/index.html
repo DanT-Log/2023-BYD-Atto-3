@@ -127,6 +127,7 @@
   .charge-stats-row .hero-stat{ flex: 1; display: flex; flex-direction: column; gap: 3px; }
   .charge-stats-row .hero-stat .k{ font-size: 11.5px; color: var(--text-secondary); white-space: nowrap; }
   .charge-stats-row .hero-stat .v{ font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .charge-stats-row .hero-stat .v-sub{ font-size: 11px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 
   /* Idle state leads with range instead of the gauge -- matches the
      reference pattern where the big hero number carries the moment
@@ -411,6 +412,9 @@
       <div class="group-header">Sessions</div>
       <div class="card" id="sessions-list"></div>
     </div>
+    <div class="note" id="osm-attribution-history" style="display:none; text-align:center;">
+      Location data &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors
+    </div>
   </div>
 
   <!-- ============ SETTINGS ============ -->
@@ -631,6 +635,11 @@ document.querySelectorAll('.tab-bar-btn').forEach(btn => {
 // ============================================================
 let appUnlocked = false; // resets on reload -- deliberately re-locks each fresh visit
 
+// Shown in place of a session's location until the app is unlocked -- a
+// plain lock, not "Home 🔒"/"Public 🔒", since announcing the category
+// while hiding the detail doesn't actually protect anything.
+const LOCATION_LOCK_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+
 function showPasskeyModal(msg) {
   return new Promise(resolve => {
     const backdrop = document.getElementById('passkey-modal');
@@ -698,6 +707,7 @@ async function unlockApp() {
   document.getElementById('lock-icon-unlocked').style.display = 'block';
   document.getElementById('btn-full').classList.remove('locked');
   document.getElementById('btn-session').classList.remove('locked');
+  if (typeof allSessions !== 'undefined' && allSessions && selectedRange) applyRange(); // reveal locations already on screen
   await openSettingsIfUnlocked();
   loadStatus();
   return true;
@@ -735,6 +745,10 @@ function freshness(recordedAt) {
   return age < 1 ? 'just now' : age < 60 ? `${age} min ago` : `${Math.round(age / 60)}h ago`;
 }
 function heroRow(k, v) { return `<div class="hero-stat"><span class="k">${k}</span><span class="v">${v}</span></div>`; }
+// Same as heroRow but with a small secondary line under the value -- used
+// for "Time to full" so the actual clock time sits with the duration
+// instead of needing its own column (the row is already a tight 3-up flex).
+function heroRowSub(k, v, sub) { return `<div class="hero-stat"><span class="k">${k}</span><span class="v">${v}</span>${sub ? `<span class="v-sub">${sub}</span>` : ''}</div>`; }
 
 function showHero(which) {
   // 'bar', 'idle', or 'none' -- mutually exclusive. 'none' is for the
@@ -801,11 +815,14 @@ function renderStatus(snap, settings, openSession) {
     label.textContent = 'Charging';
     updated.textContent = freshness(snap.recorded_at);
     renderChargeBar(snap.battery_pct, settings, false);
-    const timeToFull = (snap.remaining_hours != null && snap.remaining_minutes != null)
-      ? `${snap.remaining_hours}h ${snap.remaining_minutes}m` : '—';
+    const hasEta = snap.remaining_hours != null && snap.remaining_minutes != null;
+    const timeToFull = hasEta ? `${snap.remaining_hours}h ${snap.remaining_minutes}m` : '—';
+    const etaClock = hasEta
+      ? fmtTime(new Date(Date.now() + (snap.remaining_hours * 60 + snap.remaining_minutes) * 60000))
+      : '';
     statsRow.innerHTML =
       heroRow('Speed', snap.charging_power_kw != null ? snap.charging_power_kw.toFixed(1) + ' kW' : '—') +
-      heroRow('Time to full', timeToFull) +
+      heroRowSub('Time to full', timeToFull, etaClock ? `by ${etaClock}` : '') +
       heroRow('Range', snap.range_km != null ? Math.round(snap.range_km) + ' km' : '—');
   } else {
     // Idle: range leads as the big hero number instead of the gauge,
@@ -1076,18 +1093,54 @@ document.getElementById('range-apply').addEventListener('click', () => {
   closeRangeModal();
 });
 
-function renderSessionsList(sessions) {
+async function renderSessionsList(sessions) {
   const list = document.getElementById('sessions-list');
-  if (sessions.length === 0) { list.innerHTML = `<div class="empty-state">No charging sessions in this period.</div>`; return; }
-  list.innerHTML = sessions.map((s, i) => `
+  const attribution = document.getElementById('osm-attribution-history');
+  if (sessions.length === 0) {
+    list.innerHTML = `<div class="empty-state">No charging sessions in this period.</div>`;
+    attribution.style.display = 'none';
+    return;
+  }
+
+  // Locked: just a lock icon, no category text -- "Home 🔒" still tells
+  // anyone glancing at the screen it's a home charge, which defeats the
+  // point of locking it. Unlocked: fetch the real place for every row
+  // shown in one batched call rather than one request per session.
+  let labels = {};
+  let anyLabel = false;
+  if (appUnlocked) {
+    try {
+      const passkey = localStorage.getItem(PASSKEY_STORAGE_KEY);
+      const r = await fn('read-protected', { passkey, what: 'sessions', session_ids: sessions.map(s => s.id) });
+      if (r.ok) labels = r.data.sessions || {};
+    } catch (err) { console.error('location fetch failed', err); }
+  }
+
+  list.innerHTML = sessions.map((s, i) => {
+    let locationPart;
+    if (s.location_type == null) {
+      locationPart = 'Unknown'; // nothing categorized, so nothing to lock
+    } else if (!appUnlocked) {
+      locationPart = LOCATION_LOCK_SVG;
+    } else {
+      const category = s.location_type === 'home' ? 'Home' : s.location_type === 'public' ? 'Public' : null;
+      const loc = labels[s.id];
+      const specific = loc?.location_label
+        || (loc && loc.start_latitude != null ? `${loc.start_latitude.toFixed(5)}, ${loc.start_longitude.toFixed(5)}` : null);
+      if (loc?.location_label) anyLabel = true;
+      locationPart = category && specific ? `${category} · ${specific}` : (specific || category || 'Unknown');
+    }
+    return `
     <div class="session-row" data-idx="${i}">
       <div class="session-row-top">
         <span class="session-row-date">${fmtDate(s.started_at)}</span>
         <span class="session-row-cost">${fmtMoney(s.cost)}</span>
       </div>
-      <div class="session-row-sub">${s.location_type === 'home' ? 'Home' : s.location_type === 'public' ? 'Public' : 'Unknown'} · ${fmtPct(s.start_pct)} → ${fmtPct(s.end_pct)} · ${fmtKwh(s.energy_added_kwh)}</div>
+      <div class="session-row-sub">${locationPart} · ${fmtPct(s.start_pct)} → ${fmtPct(s.end_pct)} · ${fmtKwh(s.energy_added_kwh)}</div>
     </div>
-  `).join('');
+  `;
+  }).join('');
+  attribution.style.display = anyLabel ? 'block' : 'none';
   list.querySelectorAll('.session-row').forEach(row => {
     row.addEventListener('click', () => showSessionDetail(sessions, parseInt(row.dataset.idx, 10)));
   });
@@ -1120,7 +1173,7 @@ async function showSessionDetail(sessions, idx) {
       <div class="row"><span class="k">Distance since last</span><span class="v">${fmtKm(s.km_since_last_charge)}</span></div>
       <div class="row"><span class="k">Cost</span><span class="v">${fmtMoney(s.cost)}${!s.rate_confirmed ? ' (estimated rate)' : ''}</span></div>
       ${s.charger_name ? `<div class="row"><span class="k">Charger</span><span class="v">${s.charger_name}</span></div>` : ''}
-      <div class="row"><span class="k">Location</span><span class="v" id="detail-location">${appUnlocked ? 'Loading…' : (s.location_type === 'home' ? 'Home 🔒' : s.location_type === 'public' ? 'Public 🔒' : 'Unknown')}</span></div>
+      <div class="row"><span class="k">Location</span><span class="v" id="detail-location">${s.location_type == null ? 'Unknown' : (appUnlocked ? 'Loading…' : LOCATION_LOCK_SVG)}</span></div>
     </div>
   `;
   document.getElementById('osm-attribution').style.display = 'none';
