@@ -309,11 +309,17 @@
   .modal{ background: var(--card); border-radius: 24px; padding: 22px; width: 100%; max-width: 320px; }
   .modal h3{ margin: 0 0 6px; font-size: 17px; }
   .modal p{ margin: 0 0 14px; font-size: 13px; color: var(--text-secondary); }
-  .modal input[type="password"]{
+  .modal input[type="password"], .modal input[type="email"]{
     width: 100%; border: none; background: var(--segment-track); border-radius: 8px; padding: 12px;
     font-size: 16px; color: var(--text); margin-bottom: 8px; font-family: inherit;
   }
   .modal .err{ color: var(--red); font-size: 12px; min-height: 16px; margin-bottom: 8px; }
+  /* Login is a full gate, not a dismissible modal -- no backdrop click-through,
+     no cancel button, and it sits above everything including the tab bar. */
+  #login-screen{ z-index: 200; background: var(--bg); display: none; }
+  #login-screen.open{ display: flex; }
+  #login-screen .modal{ max-width: 340px; }
+  #login-screen .modal h3{ font-size: 22px; }
   .modal-buttons{ display: flex; gap: 10px; }
   .modal-buttons button{ flex: 1; border: none; border-radius: 9px; padding: 11px; font-size: 15px; font-weight: 600; cursor: pointer; }
   .modal-cancel{ background: var(--active-tint); color: var(--text); }
@@ -333,9 +339,8 @@
 <div class="wrap">
   <div class="header-row">
     <div class="title">Atto 3</div>
-    <button class="icon-btn" id="lock-btn" aria-label="Unlock">
-      <svg id="lock-icon-locked" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
-      <svg id="lock-icon-unlocked" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none; color: #007A54;"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 4-4 4 4 0 0 1 4 4"/></svg>
+    <button class="icon-btn" id="logout-btn" aria-label="Log out" title="Log out">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
     </button>
   </div>
 
@@ -380,9 +385,10 @@
         <svg class="btn-lock" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
       </button>
       <div class="action-row">
-        <button class="btn-util" id="btn-light">
+        <button class="btn-util locked" id="btn-light">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
           <span class="btn-label">Light check</span>
+          <svg class="btn-lock" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
         </button>
         <button class="btn-util locked" id="btn-full">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
@@ -421,8 +427,7 @@
   <div class="panel" id="panel-settings">
     <div id="settings-locked" class="lock-screen">
       <div class="icon">🔒</div>
-      <p>Settings are locked. Enter the password to view and change them.</p>
-      <button class="btn btn-primary" id="settings-unlock-btn" style="max-width:200px; margin:0 auto; display:flex;">Unlock</button>
+      <p>Settings are admin-only. Ask an admin to make this change.</p>
     </div>
     <div id="settings-form" style="display:none;">
       <div class="group">
@@ -529,15 +534,15 @@
   </button>
 </div>
 
-<div class="modal-backdrop" id="passkey-modal">
+<div class="modal-backdrop" id="login-screen">
   <div class="modal">
-    <h3>Password</h3>
-    <p id="passkey-modal-msg">Enter the password to continue.</p>
-    <input type="password" id="passkey-input" autocomplete="current-password" inputmode="text">
-    <div class="err" id="passkey-err"></div>
+    <h3>Atto 3</h3>
+    <p id="login-msg">Sign in to view your charging data.</p>
+    <input type="email" id="login-email" autocomplete="username" placeholder="Email" inputmode="email">
+    <input type="password" id="login-password" autocomplete="current-password" placeholder="Password">
+    <div class="err" id="login-err"></div>
     <div class="modal-buttons">
-      <button class="modal-cancel" id="passkey-cancel">Cancel</button>
-      <button class="modal-confirm" id="passkey-confirm">Unlock</button>
+      <button class="modal-confirm" id="login-confirm" style="flex:1;">Log in</button>
     </div>
   </div>
 </div>
@@ -580,25 +585,37 @@
 
 <script>
 const SUPABASE_URL = "https://ujpcabmacpnbtyiharnk.supabase.co";
-const SUPABASE_KEY = "sb_publishable_MYvAXGlFH-AyOkGU-FceYg_THPLZqCy";
-const PASSKEY_STORAGE_KEY = "atto3_app_passkey";
-const PASSKEY_SAVED_AT_KEY = "atto3_app_passkey_saved_at";
-const PASSKEY_EXPIRY_MS = 24 * 60 * 60 * 1000; // remembered unlock expires a day after it was entered
+const SUPABASE_KEY = "sb_publishable_MYvAXGlFH-AyOkGU-FceYg_THPLZqCy"; // the publishable key is meant to be public -- it does nothing without a valid logged-in session, since anon lost all table/view access in the login migration
 
+// Every read and every action now rides on the signed-in user's own session
+// token, not the publishable key alone -- `apikey` identifies the project,
+// `Authorization` is what RLS/edge functions actually check.
 async function sb(path) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${await getAccessToken()}` },
   });
+  if (res.status === 401) { onSessionExpired(); throw new Error('Session expired'); }
   if (!res.ok) throw new Error(`Supabase fetch failed: ${res.status}`);
   return res.json();
 }
 async function fn(name, body) {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}),
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await getAccessToken()}` },
+    body: JSON.stringify(body || {}),
   });
+  if (res.status === 401) onSessionExpired();
   let data = {};
   try { data = await res.json(); } catch {}
   return { ok: res.ok, status: res.status, data };
+}
+// Called whenever the API says our token is no good -- stale/revoked session,
+// not just "about to expire" (that case is handled ahead of time inside
+// getAccessToken()). Bounces back to the login gate rather than leaving the
+// app stuck quietly failing every request.
+function onSessionExpired() {
+  clearSession();
+  showLoginScreen('Session expired — please log in again.');
 }
 
 const fmtMoney = (n) => n == null ? '—' : `$${Number(n).toFixed(2)}`;
@@ -631,95 +648,136 @@ document.querySelectorAll('.tab-bar-btn').forEach(btn => {
 });
 
 // ============================================================
-// Passkey / lock
+// Auth / session
 // ============================================================
-let appUnlocked = false; // resets on reload -- deliberately re-locks each fresh visit
+// Real Supabase Auth replaces the old shared passkey: nothing in the app
+// (not even a public summary) loads without a signed-in session, and a
+// session's role (admin vs user) comes straight from its JWT's
+// app_metadata, set server-side when the account was created.
+const SESSION_STORAGE_KEY = 'atto3_session'; // { access_token, refresh_token, expires_at, role }
+let authSession = loadStoredSession();
 
-// Shown in place of a session's location until the app is unlocked -- a
-// plain lock, not "Home 🔒"/"Public 🔒", since announcing the category
-// while hiding the detail doesn't actually protect anything.
-const LOCATION_LOCK_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
-
-function showPasskeyModal(msg) {
-  return new Promise(resolve => {
-    const backdrop = document.getElementById('passkey-modal');
-    const input = document.getElementById('passkey-input');
-    const err = document.getElementById('passkey-err');
-    document.getElementById('passkey-modal-msg').textContent = msg && !msg.toLowerCase().includes('wrong')
-      ? msg : 'Enter the password to continue.';
-    err.textContent = msg && msg.toLowerCase().includes('wrong') ? msg : '';
-    input.value = '';
-    backdrop.classList.add('open');
-    setTimeout(() => input.focus(), 50);
-    function cleanup(val) {
-      backdrop.classList.remove('open');
-      document.getElementById('passkey-confirm').removeEventListener('click', onConfirm);
-      document.getElementById('passkey-cancel').removeEventListener('click', onCancel);
-      input.removeEventListener('keydown', onKey);
-      resolve(val);
-    }
-    function onConfirm() { cleanup(input.value || null); }
-    function onCancel() { cleanup(null); }
-    function onKey(e) { if (e.key === 'Enter') onConfirm(); }
-    document.getElementById('passkey-confirm').addEventListener('click', onConfirm);
-    document.getElementById('passkey-cancel').addEventListener('click', onCancel);
-    input.addEventListener('keydown', onKey);
+function loadStoredSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function storeSession(data) {
+  authSession = data;
+  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(data));
+}
+function clearSession() {
+  authSession = null;
+  localStorage.removeItem(SESSION_STORAGE_KEY);
+}
+function decodeRole(accessToken) {
+  try {
+    const payload = JSON.parse(atob(accessToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return payload?.app_metadata?.role === 'admin' ? 'admin' : 'user';
+  } catch { return 'user'; }
+}
+function applyTokenResponse(data) {
+  storeSession({
+    access_token: data.access_token,
+    refresh_token: data.refresh_token,
+    expires_at: Date.now() + (data.expires_in * 1000),
+    role: decodeRole(data.access_token),
   });
 }
-async function getPasskey(errorMsg) {
-  const stored = localStorage.getItem(PASSKEY_STORAGE_KEY);
-  const savedAt = Number(localStorage.getItem(PASSKEY_SAVED_AT_KEY));
-  const expired = !savedAt || (Date.now() - savedAt) > PASSKEY_EXPIRY_MS;
-  if (stored && !expired && !errorMsg) return stored;
-  if (stored && expired) clearStoredPasskey(); // stale -- force a fresh entry rather than silently reusing it
-  const entered = await showPasskeyModal(errorMsg);
-  if (!entered) return null;
-  localStorage.setItem(PASSKEY_STORAGE_KEY, entered);
-  localStorage.setItem(PASSKEY_SAVED_AT_KEY, String(Date.now()));
-  return entered;
-}
-function clearStoredPasskey() {
-  localStorage.removeItem(PASSKEY_STORAGE_KEY);
-  localStorage.removeItem(PASSKEY_SAVED_AT_KEY);
+
+async function refreshSession() {
+  if (!authSession?.refresh_token) return false;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: authSession.refresh_token }),
+    });
+    if (!res.ok) return false;
+    applyTokenResponse(await res.json());
+    return true;
+  } catch { return false; }
 }
 
-async function verifyPasskeyServer(passkey) {
-  const r = await fn('verify-passkey', { passkey });
-  return r.ok;
+// The single source every sb()/fn() call reads from -- refreshes ahead of
+// expiry so a long-open tab doesn't suddenly start failing requests.
+async function getAccessToken() {
+  if (!authSession) return '';
+  if (Date.now() > authSession.expires_at - 60000) await refreshSession();
+  return authSession?.access_token || '';
 }
 
-// One unlock for the whole app: Settings, Full update, Session started,
-// and revealing any location all share the same passkey check.
-async function unlockApp() {
-  if (appUnlocked) return true;
-  let passkey = await getPasskey();
-  if (!passkey) return false;
-  let ok = await verifyPasskeyServer(passkey);
-  if (!ok) {
-    clearStoredPasskey();
-    const retry = await getPasskey('Wrong password — try again.');
-    if (!retry) return false;
-    ok = await verifyPasskeyServer(retry);
-    if (!ok) { clearStoredPasskey(); return false; }
-  }
-  appUnlocked = true;
-  document.getElementById('lock-icon-locked').style.display = 'none';
-  document.getElementById('lock-icon-unlocked').style.display = 'block';
-  document.getElementById('btn-full').classList.remove('locked');
-  document.getElementById('btn-session').classList.remove('locked');
-  if (typeof allSessions !== 'undefined' && allSessions && selectedRange) applyRange(); // reveal locations already on screen
-  await openSettingsIfUnlocked();
+function isAdmin() { return authSession?.role === 'admin'; }
+
+async function doLogin(email, password) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: { apikey: SUPABASE_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) return { ok: false, error: data?.error_description || data?.msg || 'Login failed.' };
+  applyTokenResponse(data);
+  return { ok: true };
+}
+
+function showLoginScreen(msg) {
+  document.getElementById('login-screen').classList.add('open');
+  document.getElementById('login-err').textContent = msg || '';
+}
+function hideLoginScreen() {
+  document.getElementById('login-screen').classList.remove('open');
+}
+
+// Admin sees live settings and the two protected action buttons unlocked;
+// a signed-in user sees everything else (dashboard, history, location) but
+// Settings/Full update/Start charging stay out of reach -- decided once at
+// login, no separate in-app unlock step.
+function updateRoleUI() {
+  const admin = isAdmin();
+  document.getElementById('btn-light').classList.toggle('locked', !admin);
+  document.getElementById('btn-session').classList.toggle('locked', !admin);
+  document.getElementById('btn-full').classList.toggle('locked', !admin);
+  document.getElementById('settings-locked').style.display = admin ? 'none' : 'block';
+  document.getElementById('settings-form').style.display = admin ? 'block' : 'none';
+  if (admin) loadSettingsForm();
+}
+
+document.getElementById('logout-btn').addEventListener('click', () => {
+  clearSession();
+  showLoginScreen();
+});
+
+async function onLoginSubmit() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-err');
+  if (!email || !password) { errEl.textContent = 'Enter your email and password.'; return; }
+  const btn = document.getElementById('login-confirm');
+  btn.disabled = true;
+  const result = await doLogin(email, password);
+  btn.disabled = false;
+  if (!result.ok) { errEl.textContent = result.error; return; }
+  hideLoginScreen();
+  updateRoleUI();
   loadStatus();
-  return true;
 }
-document.getElementById('lock-btn').addEventListener('click', () => { if (!appUnlocked) unlockApp(); });
-document.getElementById('settings-unlock-btn').addEventListener('click', () => unlockApp());
+document.getElementById('login-confirm').addEventListener('click', onLoginSubmit);
+document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') onLoginSubmit(); });
 
-async function openSettingsIfUnlocked() {
-  if (!appUnlocked) return;
-  document.getElementById('settings-locked').style.display = 'none';
-  document.getElementById('settings-form').style.display = 'block';
-  await loadSettingsForm();
+async function boot() {
+  if (authSession) {
+    const refreshed = await refreshSession();
+    // A just-issued access token is still good for a while even if a
+    // refresh attempt fails outright (e.g. momentarily offline) -- only
+    // force a fresh login when there's truly nothing usable left.
+    if (!refreshed && (!authSession.expires_at || Date.now() > authSession.expires_at)) clearSession();
+  }
+  if (!authSession) { showLoginScreen(); return; }
+  hideLoginScreen();
+  updateRoleUI();
+  loadStatus();
 }
 
 // ============================================================
@@ -872,8 +930,9 @@ async function runWithButton(btn, label, task) {
 }
 
 document.getElementById('btn-light').addEventListener('click', () => {
+  if (!isAdmin()) { toast('Admins only.'); return; }
   runWithButton(document.getElementById('btn-light'), 'Checking…', async () => {
-    const r = await fn('trigger-poll', {}); // no passkey -> always mode:auto, same path pg_cron uses
+    const r = await fn('trigger-poll', {});
     if (!r.ok) { toast('Could not start the check.'); return; }
     toast('Checking…');
     await new Promise(res => setTimeout(res, 15000));
@@ -883,10 +942,9 @@ document.getElementById('btn-light').addEventListener('click', () => {
 });
 
 document.getElementById('btn-full').addEventListener('click', async () => {
-  if (!appUnlocked && !(await unlockApp())) return;
-  const passkey = localStorage.getItem(PASSKEY_STORAGE_KEY);
+  if (!isAdmin()) { toast('Admins only.'); return; }
   runWithButton(document.getElementById('btn-full'), 'Asking the car…', async () => {
-    const r = await fn('trigger-poll', { passkey, mode: 'full' });
+    const r = await fn('trigger-poll', { mode: 'full' });
     if (!r.ok) { toast('Could not start the update.'); return; }
     toast('Asking the car…');
     await new Promise(res => setTimeout(res, 20000));
@@ -896,11 +954,10 @@ document.getElementById('btn-full').addEventListener('click', async () => {
 });
 
 document.getElementById('btn-session').addEventListener('click', async () => {
-  if (!appUnlocked && !(await unlockApp())) return;
+  if (!isAdmin()) { toast('Admins only.'); return; }
   if (!confirm('Send a real start-charging command to the car? Make sure it\'s actually plugged in first.')) return;
-  const passkey = localStorage.getItem(PASSKEY_STORAGE_KEY);
   runWithButton(document.getElementById('btn-session'), 'Starting…', async () => {
-    const r = await fn('control-charge', { passkey, action: 'start' });
+    const r = await fn('control-charge', { action: 'start' });
     if (!r.ok || !r.data.triggered) { toast('Could not send the start command.'); return; }
     toast('Starting — this can take a minute to confirm.');
     await new Promise(res => setTimeout(res, 15000));
@@ -1102,26 +1159,20 @@ async function renderSessionsList(sessions) {
     return;
   }
 
-  // Locked: just a lock icon, no category text -- "Home 🔒" still tells
-  // anyone glancing at the screen it's a home charge, which defeats the
-  // point of locking it. Unlocked: fetch the real place for every row
-  // shown in one batched call rather than one request per session.
+  // Logging in is the gate now -- any signed-in user (admin or user) sees
+  // the real place, fetched for every row shown in one batched call rather
+  // than one request per session.
   let labels = {};
   let anyLabel = false;
-  if (appUnlocked) {
-    try {
-      const passkey = localStorage.getItem(PASSKEY_STORAGE_KEY);
-      const r = await fn('read-protected', { passkey, what: 'sessions', session_ids: sessions.map(s => s.id) });
-      if (r.ok) labels = r.data.sessions || {};
-    } catch (err) { console.error('location fetch failed', err); }
-  }
+  try {
+    const r = await fn('read-protected', { what: 'sessions', session_ids: sessions.map(s => s.id) });
+    if (r.ok) labels = r.data.sessions || {};
+  } catch (err) { console.error('location fetch failed', err); }
 
   list.innerHTML = sessions.map((s, i) => {
     let locationPart;
     if (s.location_type == null) {
-      locationPart = 'Unknown'; // nothing categorized, so nothing to lock
-    } else if (!appUnlocked) {
-      locationPart = LOCATION_LOCK_SVG;
+      locationPart = 'Unknown';
     } else {
       const category = s.location_type === 'home' ? 'Home' : s.location_type === 'public' ? 'Public' : null;
       const loc = labels[s.id];
@@ -1173,7 +1224,7 @@ async function showSessionDetail(sessions, idx) {
       <div class="row"><span class="k">Distance since last</span><span class="v">${fmtKm(s.km_since_last_charge)}</span></div>
       <div class="row"><span class="k">Cost</span><span class="v">${fmtMoney(s.cost)}${!s.rate_confirmed ? ' (estimated rate)' : ''}</span></div>
       ${s.charger_name ? `<div class="row"><span class="k">Charger</span><span class="v">${s.charger_name}</span></div>` : ''}
-      <div class="row"><span class="k">Location</span><span class="v" id="detail-location">${s.location_type == null ? 'Unknown' : (appUnlocked ? 'Loading…' : LOCATION_LOCK_SVG)}</span></div>
+      <div class="row"><span class="k">Location</span><span class="v" id="detail-location">${s.location_type == null ? 'Unknown' : 'Loading…'}</span></div>
     </div>
   `;
   document.getElementById('osm-attribution').style.display = 'none';
@@ -1182,9 +1233,8 @@ async function showSessionDetail(sessions, idx) {
   document.getElementById('panel-session-detail').classList.add('active');
   window.scrollTo(0, 0);
 
-  if (appUnlocked) {
-    const passkey = localStorage.getItem(PASSKEY_STORAGE_KEY);
-    const r = await fn('read-protected', { passkey, what: 'sessions', session_ids: [s.id] });
+  if (s.location_type != null) {
+    const r = await fn('read-protected', { what: 'sessions', session_ids: [s.id] });
     const loc = r.ok ? r.data.sessions?.[s.id] : null;
     const target = document.getElementById('detail-location');
     if (target) {
@@ -1233,9 +1283,8 @@ async function loadSettingsForm() {
     document.getElementById('s-stop-pct').value = s.auto_stop_at_pct ?? '';
     document.getElementById('s-restart-pct').value = s.restart_at_pct ?? '';
 
-    // Home lat/lng are protected -- fetch only now that we're unlocked.
-    const passkey = localStorage.getItem(PASSKEY_STORAGE_KEY);
-    const homeRes = await fn('read-protected', { passkey, what: 'home' });
+    // Home lat/lng are protected -- only reachable now via an admin session.
+    const homeRes = await fn('read-protected', { what: 'home' });
     if (homeRes.ok && homeRes.data.home) {
       document.getElementById('s-home-lat').value = homeRes.data.home.home_latitude ?? '';
       document.getElementById('s-home-lng').value = homeRes.data.home.home_longitude ?? '';
@@ -1266,8 +1315,7 @@ function renderChargersList() {
 }
 
 document.getElementById('add-charger-btn').addEventListener('click', async () => {
-  const passkey = localStorage.getItem(PASSKEY_STORAGE_KEY);
-  const r = await fn('edit-chargers', { passkey, action: 'add', name: 'New charger', draw_kw: 2.0 });
+  const r = await fn('edit-chargers', { action: 'add', name: 'New charger', draw_kw: 2.0 });
   if (!r.ok) { toast('Could not add charger.'); return; }
   chargersCache.push(r.data.charger);
   renderChargersList();
@@ -1276,8 +1324,7 @@ document.getElementById('add-charger-btn').addEventListener('click', async () =>
 async function deleteCharger(idx) {
   const c = chargersCache[idx];
   if (!confirm(`Remove "${c.name}"?`)) return;
-  const passkey = localStorage.getItem(PASSKEY_STORAGE_KEY);
-  const r = await fn('edit-chargers', { passkey, action: 'delete', id: c.id });
+  const r = await fn('edit-chargers', { action: 'delete', id: c.id });
   if (!r.ok) { toast('Could not remove charger.'); return; }
   chargersCache.splice(idx, 1);
   renderChargersList();
@@ -1300,8 +1347,7 @@ function renderRateWindowsList() {
 }
 
 document.getElementById('add-rate-window-btn').addEventListener('click', async () => {
-  const passkey = localStorage.getItem(PASSKEY_STORAGE_KEY);
-  const r = await fn('edit-rate-windows', { passkey, action: 'add', start_hour: 0, end_hour: 6, rate_per_kwh: 0.08 });
+  const r = await fn('edit-rate-windows', { action: 'add', start_hour: 0, end_hour: 6, rate_per_kwh: 0.08 });
   if (!r.ok) { toast(r.data.error || 'Could not add window.'); return; }
   rateWindowsCache.push(r.data.window);
   renderRateWindowsList();
@@ -1310,8 +1356,7 @@ document.getElementById('add-rate-window-btn').addEventListener('click', async (
 async function deleteRateWindow(idx) {
   const w = rateWindowsCache[idx];
   if (!confirm(`Remove the ${w.start_hour}:00\u2013${w.end_hour}:00 window?`)) return;
-  const passkey = localStorage.getItem(PASSKEY_STORAGE_KEY);
-  const r = await fn('edit-rate-windows', { passkey, action: 'delete', id: w.id });
+  const r = await fn('edit-rate-windows', { action: 'delete', id: w.id });
   if (!r.ok) { toast('Could not remove window.'); return; }
   rateWindowsCache.splice(idx, 1);
   renderRateWindowsList();
@@ -1333,7 +1378,6 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
   const statusEl = document.getElementById('save-status');
   statusEl.textContent = 'Saving…';
   statusEl.className = 'save-status';
-  const passkey = localStorage.getItem(PASSKEY_STORAGE_KEY);
 
   const stopPct = parseFloat(document.getElementById('s-stop-pct').value);
   const restartPct = parseFloat(document.getElementById('s-restart-pct').value);
@@ -1344,7 +1388,6 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
   }
 
   const payload = {
-    passkey,
     poll_interval_minutes: parseFloat(document.getElementById('s-interval').value),
     home_rate_per_kwh: parseFloat(document.getElementById('s-home-rate').value) || 0,
     public_rate_per_kwh: parseFloat(document.getElementById('s-public-rate').value) || 0,
@@ -1374,7 +1417,7 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
       const kw = parseFloat(row.querySelector('.c-kw').value);
       if (!name || !Number.isFinite(kw)) continue;
       if (name !== chargersCache[i].name || kw !== Number(chargersCache[i].draw_kw)) {
-        await fn('edit-chargers', { passkey, action: 'update', id: chargersCache[i].id, name, draw_kw: kw });
+        await fn('edit-chargers', { action: 'update', id: chargersCache[i].id, name, draw_kw: kw });
       }
     }
 
@@ -1388,7 +1431,7 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
       if (!Number.isInteger(startHour) || !Number.isInteger(endHour) || !Number.isFinite(rate)) continue;
       const w = rateWindowsCache[i];
       if (startHour !== w.start_hour || endHour !== w.end_hour || rate !== Number(w.rate_per_kwh)) {
-        const r = await fn('edit-rate-windows', { passkey, action: 'update', id: w.id, start_hour: startHour, end_hour: endHour, rate_per_kwh: rate });
+        const r = await fn('edit-rate-windows', { action: 'update', id: w.id, start_hour: startHour, end_hour: endHour, rate_per_kwh: rate });
         if (!r.ok) { statusEl.textContent = r.data.error || 'A rate window failed to save.'; statusEl.className = 'save-status error'; return; }
       }
     }
@@ -1406,7 +1449,7 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
 // ============================================================
 // Boot
 // ============================================================
-loadStatus();
+boot();
 statusTimer = setInterval(loadStatus, 30000);
 </script>
 </body>
