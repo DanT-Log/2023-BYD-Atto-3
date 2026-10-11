@@ -347,9 +347,6 @@
       <button class="icon-btn" id="refresh-btn" aria-label="Refresh" title="Refresh">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/></svg>
       </button>
-      <button class="icon-btn" id="logout-btn" aria-label="Log out" title="Log out">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
-      </button>
     </div>
   </div>
 
@@ -775,7 +772,6 @@ function doLogout() {
   clearSession();
   showLoginScreen();
 }
-document.getElementById('logout-btn').addEventListener('click', doLogout);
 document.getElementById('settings-logout-btn').addEventListener('click', doLogout);
 
 async function onLoginSubmit(e) {
