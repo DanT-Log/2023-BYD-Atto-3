@@ -1413,12 +1413,17 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
     public_rate_per_kwh: parseFloat(document.getElementById('s-public-rate').value) || 0,
     home_radius_m: parseFloat(document.getElementById('s-home-radius').value) || 200,
     time_window_enabled: document.getElementById('s-window-enabled').checked,
-    window_start_time: document.getElementById('s-window-start').value,
-    window_end_time: document.getElementById('s-window-end').value,
     pct_limit_enabled: document.getElementById('s-pct-enabled').checked,
     auto_stop_at_pct: Number.isFinite(stopPct) ? stopPct : null,
     restart_at_pct: Number.isFinite(restartPct) ? restartPct : null,
   };
+  // Only send these if they actually hold a real HH:MM value -- an empty
+  // <input type="time"> (e.g. one that never got populated) must not block
+  // an otherwise unrelated save, like just changing the poll interval.
+  const windowStart = document.getElementById('s-window-start').value;
+  const windowEnd = document.getElementById('s-window-end').value;
+  if (windowStart) payload.window_start_time = windowStart;
+  if (windowEnd) payload.window_end_time = windowEnd;
   const lat = parseFloat(document.getElementById('s-home-lat').value);
   const lng = parseFloat(document.getElementById('s-home-lng').value);
   if (Number.isFinite(lat)) payload.home_latitude = lat;
