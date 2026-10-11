@@ -142,9 +142,6 @@ def plan_next(now: datetime, *, state: dict, settings: dict, ctl: dict,
               pending_action: str | None, override_until: datetime | None,
               standby_rate_fn) -> tuple[datetime, str]:
     """The single answer to 'when should we poll next?'"""
-    if pending_action:
-        return now + timedelta(minutes=REVIEW_DELAY_MIN), f"reviewing {pending_action} command"
-
     now_local = now.astimezone(VEHICLE_TZ)
     charging = bool(state.get("is_charging"))
     plugged = bool(state.get("plugged"))
@@ -163,6 +160,19 @@ def plan_next(now: datetime, *, state: dict, settings: dict, ctl: dict,
     we = settings.get("window_end_time") or "06:00"
 
     cands: list[tuple[datetime, str]] = []
+
+    # A command (start/stop) was just sent or is being held off a resend --
+    # review again soon to see if it landed. This used to be an unconditional
+    # early return, which meant that whenever nothing limits charging (no %
+    # cap or time window), the car's state alone makes decide_action retry
+    # "start" on literally every poll while plugged-in-but-not-charging --
+    # permanently locking the cadence to this 2-minute review delay and
+    # completely hiding the much faster 1-minute fast_until window below
+    # (confirmed live: a real "Start charging" press sat on this 2-min+
+    # cadence instead of the intended 1-min checks). Making it a normal
+    # candidate lets the faster, more specific windows below win instead.
+    if pending_action:
+        cands.append((now + timedelta(minutes=REVIEW_DELAY_MIN), f"reviewing {pending_action} command"))
 
     # Safety-net cadence. interval=0 means "pause idle polling" -- it
     # must NOT also collapse the charging-cadence cap below, or the car
