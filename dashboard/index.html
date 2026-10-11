@@ -918,7 +918,34 @@ function renderStatus(snap, settings, openSession) {
   renderOpenSession(openSession, snap, settings);
 }
 
-function renderOpenSession(session, snap, settings) {
+// Trapezoidal integration of charging_power_kw across a session's snapshots,
+// holding the last known power flat through to "now" for the trailing gap
+// since the last reading -- mirrors poll.py's integrate_energy_kwh exactly,
+// which is what actually computes a session's energy_added_kwh once it
+// closes. Using anything simpler here (e.g. current power x total elapsed
+// time) badly misrepresents a session still in progress: power on a DC fast
+// charger ramps up then tapers over the session, so "current power" alone
+// is only right at the single instant it was read.
+function integrateEnergyKwh(snapshots, nowMs) {
+  const usable = snapshots.filter(s => s.charging_power_kw != null);
+  if (usable.length < 2) return null;
+  let totalKwh = 0;
+  for (let i = 0; i < usable.length - 1; i++) {
+    const t0 = new Date(usable[i].recorded_at).getTime();
+    const t1 = new Date(usable[i + 1].recorded_at).getTime();
+    const hours = (t1 - t0) / 3600000;
+    if (hours <= 0) continue;
+    const p0 = Number(usable[i].charging_power_kw);
+    const p1 = Number(usable[i + 1].charging_power_kw);
+    totalKwh += (p0 + p1) / 2 * hours;
+  }
+  const lastT = new Date(usable[usable.length - 1].recorded_at).getTime();
+  const trailingHours = (nowMs - lastT) / 3600000;
+  if (trailingHours > 0) totalKwh += Number(usable[usable.length - 1].charging_power_kw) * trailingHours;
+  return totalKwh;
+}
+
+async function renderOpenSession(session, snap, settings) {
   const group = document.getElementById('open-session-group');
   const divider = document.getElementById('session-divider');
   const card = document.getElementById('open-session-card');
@@ -927,11 +954,25 @@ function renderOpenSession(session, snap, settings) {
   divider.style.display = 'block';
   const elapsedMs = Date.now() - new Date(session.started_at).getTime();
   const elapsedH = elapsedMs / 3600000;
-  const power = snap && snap.charging_power_kw != null ? Number(snap.charging_power_kw) : null;
-  const kwhSoFar = power != null ? power * elapsedH : null;
+  const elapsedStr = elapsedH < 1 ? `${Math.round(elapsedMs / 60000)} min` : `${Math.floor(elapsedH)}h ${Math.round((elapsedH % 1) * 60)}m`;
+
+  let kwhSoFar = null;
+  try {
+    const snapshots = await sb(`vehicle_snapshots_public?select=recorded_at,charging_power_kw&recorded_at=gte.${encodeURIComponent(session.started_at)}&order=recorded_at.asc`);
+    kwhSoFar = integrateEnergyKwh(snapshots, Date.now());
+  } catch (err) { console.error('energy integration fetch failed', err); }
+  if (kwhSoFar == null) {
+    // Not enough power-reading history yet (e.g. seconds into a brand new
+    // session) -- fall back to the cruder %-delta estimate rather than
+    // showing nothing.
+    const pctDelta = snap && snap.battery_pct != null && session.start_pct != null
+      ? Number(snap.battery_pct) - Number(session.start_pct) : null;
+    kwhSoFar = pctDelta != null && settings.battery_capacity_kwh
+      ? (pctDelta / 100) * Number(settings.battery_capacity_kwh) : null;
+  }
+
   const rate = session.location_type === 'home' ? settings.home_rate_per_kwh : settings.public_rate_per_kwh;
   const costSoFar = kwhSoFar != null && rate != null ? kwhSoFar * rate : null;
-  const elapsedStr = elapsedH < 1 ? `${Math.round(elapsedMs / 60000)} min` : `${Math.floor(elapsedH)}h ${Math.round((elapsedH % 1) * 60)}m`;
   card.innerHTML = `
     <div class="row"><span class="k">Started</span><span class="v">${fmtTime(session.started_at)}</span></div>
     <div class="row"><span class="k">Elapsed</span><span class="v">${elapsedStr}</span></div>
