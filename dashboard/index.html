@@ -1363,14 +1363,25 @@ document.getElementById('detail-back-btn').addEventListener('click', () => {
 let chargersCache = [];
 let rateWindowsCache = [];
 
+// Three independent fetches feed this form (core settings, chargers, rate
+// windows). This used to be a single Promise.all -- a hiccup in ANY one of
+// them (one slow/flaky network request is enough) rejected the whole thing,
+// leaving every field in the form silently blank with no error shown: the
+// interval dropdown falling back to its unselected default ("Off") and
+// every number input empty, looking exactly like "nothing was ever saved"
+// even though the data was sitting in the database the whole time
+// (confirmed live: this is what happened to Dan, not a save failure).
+// Promise.allSettled means one failing fetch no longer blanks the other
+// two, and any failure now surfaces as a toast instead of silence.
 async function loadSettingsForm() {
-  try {
-    const [settingsRows, chargers, rateWindows] = await Promise.all([
-      sb('tracker_settings_public?select=*'),
-      sb('chargers?select=*&order=id.asc'),
-      sb('home_rate_windows?select=*&order=start_hour.asc'),
-    ]);
-    const s = settingsRows[0] || {};
+  const [settingsResult, chargersResult, rateWindowsResult] = await Promise.allSettled([
+    sb('tracker_settings_public?select=*'),
+    sb('chargers?select=*&order=id.asc'),
+    sb('home_rate_windows?select=*&order=start_hour.asc'),
+  ]);
+
+  if (settingsResult.status === 'fulfilled') {
+    const s = settingsResult.value[0] || {};
     document.getElementById('s-interval').value = String(s.poll_interval_minutes ?? 5);
     document.getElementById('s-home-rate').value = s.home_rate_per_kwh ?? '';
     document.getElementById('s-public-rate').value = s.public_rate_per_kwh ?? '';
@@ -1383,18 +1394,37 @@ async function loadSettingsForm() {
     document.getElementById('s-restart-pct').value = s.restart_at_pct ?? '';
 
     // Home lat/lng are protected -- only reachable now via an admin session.
-    const homeRes = await fn('read-protected', { what: 'home' });
-    if (homeRes.ok && homeRes.data.home) {
-      document.getElementById('s-home-lat').value = homeRes.data.home.home_latitude ?? '';
-      document.getElementById('s-home-lng').value = homeRes.data.home.home_longitude ?? '';
+    // Its own try/catch so a failure here doesn't blank the fields above,
+    // which already loaded fine.
+    try {
+      const homeRes = await fn('read-protected', { what: 'home' });
+      if (homeRes.ok && homeRes.data.home) {
+        document.getElementById('s-home-lat').value = homeRes.data.home.home_latitude ?? '';
+        document.getElementById('s-home-lng').value = homeRes.data.home.home_longitude ?? '';
+      }
+    } catch (err) {
+      console.error('home location load failed', err);
     }
+  } else {
+    console.error('settings load failed', settingsResult.reason);
+  }
 
-    chargersCache = chargers;
+  if (chargersResult.status === 'fulfilled') {
+    chargersCache = chargersResult.value;
     renderChargersList();
-    rateWindowsCache = rateWindows;
+  } else {
+    console.error('chargers load failed', chargersResult.reason);
+  }
+
+  if (rateWindowsResult.status === 'fulfilled') {
+    rateWindowsCache = rateWindowsResult.value;
     renderRateWindowsList();
-  } catch (err) {
-    console.error('settings load failed', err);
+  } else {
+    console.error('rate windows load failed', rateWindowsResult.reason);
+  }
+
+  if (settingsResult.status === 'rejected' || chargersResult.status === 'rejected' || rateWindowsResult.status === 'rejected') {
+    toast('Some settings could not load -- leave and reopen Settings to retry.');
   }
 }
 
