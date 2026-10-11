@@ -1471,6 +1471,24 @@ document.getElementById('save-settings-btn').addEventListener('click', async () 
 // ============================================================
 boot();
 statusTimer = setInterval(loadStatus, 30000);
+
+// iOS (especially a home-screen-added PWA) fully suspends a backgrounded
+// tab's JS -- the 30s timer above just stops, and whatever was on screen
+// (e.g. "Starting…" from a button tap mid-flight) stays frozen until
+// something forces a refresh. Catch both ways a return to foreground can
+// show up: a plain tab switch (visibilitychange) and a page restored from
+// the back/forward cache after being fully suspended (pageshow).
+function refreshOnForeground() {
+  if (authSession && !document.getElementById('login-screen').classList.contains('open')) {
+    loadStatus();
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') refreshOnForeground();
+});
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted) refreshOnForeground();
+});
 </script>
 </body>
 </html>
