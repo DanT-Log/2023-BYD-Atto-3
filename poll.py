@@ -45,6 +45,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 from pybyd import BydClient, BydConfig
+from pybyd.exceptions import BydApiError, BydAuthenticationError
 from pybyd.models.realtime import ChargingState
 from scheduler import poll_step
 
@@ -770,7 +771,24 @@ def main() -> None:
     # Light by default (BYD's cloud only). Upgrades itself to asking the car
     # when a charge has just started or ended, or when a full update was
     # requested (POLL_MODE=full).
-    state = asyncio.run(fetch_vehicle_state(POLL_MODE, open_session_before, last_full))
+    try:
+        state = asyncio.run(fetch_vehicle_state(POLL_MODE, open_session_before, last_full))
+    except BydAuthenticationError:
+        # Credentials/session rejected -- not transient, needs Dan's
+        # attention (expired password, locked account, etc). Let this
+        # crash loudly so the Actions run fails red and is obvious.
+        raise
+    except BydApiError as err:
+        # BYD's own cloud returned an error (e.g. observed: generic
+        # code=500 "Service exception" from /control/smartCharge/homePage,
+        # but this also covers pybyd's documented-transient subclasses like
+        # BydServiceBusyError/BydDataUnavailableError/BydRateLimitError).
+        # This is BYD's servers, not us -- log it clearly in the run's own
+        # output so it's visible if anyone checks, but don't fail the run
+        # and don't push a notification: a single flaky poll isn't worth
+        # waking Dan up for, and the next scheduled poll will just retry.
+        print(f"BYD API error, skipping this poll cleanly: {err}", file=sys.stderr)
+        return
     now = datetime.now(timezone.utc).isoformat()
 
     prev_is_charging = bool(prev_snapshot["is_charging"]) if prev_snapshot else None
