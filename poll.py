@@ -45,7 +45,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 from pybyd import BydClient, BydConfig
-from pybyd.exceptions import BydApiError, BydAuthenticationError
+from pybyd.exceptions import BydAuthenticationError, BydError
 from pybyd.models.realtime import ChargingState
 from scheduler import poll_step
 
@@ -778,16 +778,21 @@ def main() -> None:
         # attention (expired password, locked account, etc). Let this
         # crash loudly so the Actions run fails red and is obvious.
         raise
-    except BydApiError as err:
-        # BYD's own cloud returned an error (e.g. observed: generic
-        # code=500 "Service exception" from /control/smartCharge/homePage,
-        # but this also covers pybyd's documented-transient subclasses like
-        # BydServiceBusyError/BydDataUnavailableError/BydRateLimitError).
-        # This is BYD's servers, not us -- log it clearly in the run's own
-        # output so it's visible if anyone checks, but don't fail the run
-        # and don't push a notification: a single flaky poll isn't worth
-        # waking Dan up for, and the next scheduled poll will just retry.
-        print(f"BYD API error, skipping this poll cleanly: {err}", file=sys.stderr)
+    except BydError as err:
+        # Anything else from pybyd -- BYD's own cloud returning an error
+        # (e.g. observed: generic code=500 "Service exception" from
+        # /control/smartCharge/homePage, or the documented-transient
+        # subclasses like BydServiceBusyError/BydDataUnavailableError/
+        # BydRateLimitError), OR a transport-level failure (timeout,
+        # dropped connection, bad response -- BydTransportError, which is
+        # a *sibling* of BydApiError, not a subclass, so it has to be
+        # caught here via the shared BydError base rather than
+        # BydApiError alone). Either way this is BYD's servers/network,
+        # not us -- log it clearly in the run's own output so it's
+        # visible if anyone checks, but don't fail the run and don't
+        # push a notification: a single flaky poll isn't worth waking
+        # Dan up for, and the next scheduled poll just retries.
+        print(f"BYD error, skipping this poll cleanly: {err}", file=sys.stderr)
         return
     now = datetime.now(timezone.utc).isoformat()
 
