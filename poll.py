@@ -514,6 +514,38 @@ def notify_charge_finished(
         print(f"warning: ntfy notification failed: {exc}", file=sys.stderr)
 
 
+OUTAGE_ALERT_AFTER = timedelta(hours=2)
+
+
+def record_poll_error(message: str, prev_snapshot: dict | None, settings: dict) -> None:
+    """A whole poll failed on BYD's side. Record it where it can be seen
+    (tracker_settings.last_poll_error), and send ONE notification only if
+    no data has landed for OUTAGE_ALERT_AFTER -- a single flaky poll stays
+    silent, but a silent multi-day blackout (confirmed live, Nov 2026)
+    never happens again. Re-armed by the next successful snapshot."""
+    now = datetime.now(timezone.utc)
+    updates: dict = {"last_poll_error": message[:500], "last_poll_error_at": now.isoformat()}
+    last_ok = parse_ts(prev_snapshot["recorded_at"]) if prev_snapshot else None
+    if (last_ok is not None and now - last_ok > OUTAGE_ALERT_AFTER
+            and not settings.get("outage_alerted_at") and NTFY_TOPIC):
+        hours = (now - last_ok).total_seconds() / 3600
+        try:
+            requests.post(
+                f"https://ntfy.sh/{NTFY_TOPIC}",
+                data=(f"No data from BYD for {hours:.0f}h. Charging sessions won't open or close until "
+                      f"it recovers. Last error: {message[:200]}").encode("utf-8"),
+                headers={"Title": "BYD Atto 3 — tracker not getting data", "Priority": "default"},
+                timeout=10,
+            )
+            updates["outage_alerted_at"] = now.isoformat()
+        except Exception as exc:  # noqa: BLE001
+            print(f"warning: ntfy notification failed: {exc}", file=sys.stderr)
+    try:
+        sb_patch("tracker_settings", "true", updates)
+    except Exception as exc:  # noqa: BLE001
+        print(f"warning: could not record poll error: {exc}", file=sys.stderr)
+
+
 def get_tracker_settings() -> dict:
     rows = sb_get("tracker_settings", {"select": "*"})
     if not rows:
@@ -635,10 +667,9 @@ async def fetch_vehicle_state(mode: str, open_session: dict | None, last_full: d
 
         reason = "manual full update" if mode == "full" else reason_for_full_update(light_is_charging, open_session)
 
-        if reason is None:
+        def light_payload() -> dict:
             carried = last_full or {}
             carried_raw = carried.get("raw") if isinstance(carried.get("raw"), dict) else {}
-            print("light check: asked BYD's cloud only")
             return {
                 "battery_pct": charging.soc,
                 "is_charging": bool(light_is_charging),
@@ -672,8 +703,27 @@ async def fetch_vehicle_state(mode: str, open_session: dict | None, last_full: d
                 "poll_kind": "light",
             }
 
+        if reason is None:
+            print("light check: asked BYD's cloud only")
+            return light_payload()
+
         print(f"asking the car for a full update: {reason}")
-        realtime = await client.get_vehicle_realtime(vin)
+        try:
+            realtime = await client.get_vehicle_realtime(vin)
+        except BydAuthenticationError:
+            raise
+        except BydError as exc:
+            # Confirmed live (Nov 2026): this car-side call failed on every
+            # poll for 4.5 days. Because a full update is required whenever
+            # a charge has ended, that blocked the session from ever
+            # closing and no snapshot was written at all. The light check
+            # above already knows plugged/charging/battery %, which is all
+            # opening or closing a session needs -- so carry on with that
+            # and only lose the odometer/location for this one poll.
+            print(f"warning: full update failed, using the light check instead: {exc}", file=sys.stderr)
+            payload = light_payload()
+            payload["full_update_error"] = str(exc)
+            return payload
 
         try:
             gps = await client.get_gps_info(vin)
@@ -759,6 +809,121 @@ def recent_standby_rate() -> float | None:
     return drop_total / hours_total if hours_total > 0 else None
 
 
+def close_session(open_session: dict, ended_at: str, end_state: dict, settings: dict, last_full: dict | None) -> None:
+    """Close an open charging session at ended_at, using end_state
+    (a fetched state or a stored snapshot row) for the closing values."""
+    start_pct = open_session["start_pct"]
+    end_pct = end_state.get("battery_pct")
+    pct_delta = (end_pct - start_pct) if (start_pct is not None and end_pct is not None) else None
+
+    energy_added_kwh = integrate_energy_kwh(open_session["started_at"], ended_at)
+    estimate_method = "integrated"
+    if energy_added_kwh is None:
+        energy_added_kwh = (
+            (pct_delta / 100.0) * settings["battery_capacity_kwh"] if pct_delta is not None else None
+        )
+        estimate_method = "pct_estimate"
+
+    last_closed = get_last_closed_session()
+    km_since_last_charge = None
+    if last_closed and last_closed.get("end_odometer_km") is not None and end_state.get("odometer_km") is not None:
+        km_since_last_charge = open_session["start_odometer_km"] - last_closed["end_odometer_km"]
+
+    start_range_km = open_session.get("start_range_km")
+    end_range_km = end_state.get("range_km")
+    range_added_km = (
+        end_range_km - start_range_km if (start_range_km is not None and end_range_km is not None) else None
+    )
+
+    location_type = open_session.get("location_type") or "unknown"
+    if location_type == "home" and settings.get("home_rate_per_kwh") is not None:
+        # Time-weighted across whichever hour-of-day rate windows this
+        # session actually spans (e.g. cheap 12am-6am, default rest of
+        # day) -- falls back to the flat default rate automatically
+        # when no windows are configured, since an empty list just
+        # means every hour uses default_rate.
+        raw_windows = sb_get("home_rate_windows", {"select": "start_hour,end_hour,rate_per_kwh"})
+        rate_windows = [
+            {"start_hour": int(w["start_hour"]), "end_hour": int(w["end_hour"]), "rate_per_kwh": float(w["rate_per_kwh"])}
+            for w in raw_windows
+        ]
+        electricity_rate = time_weighted_rate(
+            parse_ts(open_session["started_at"]), parse_ts(ended_at), float(settings["home_rate_per_kwh"]), rate_windows
+        )
+        rate_confirmed = True
+    elif location_type == "public" and settings.get("public_rate_per_kwh") is not None:
+        electricity_rate = settings["public_rate_per_kwh"]
+        rate_confirmed = False  # default estimate, not a confirmed real rate
+    else:
+        electricity_rate = settings.get("home_rate_per_kwh")  # last-resort fallback
+        rate_confirmed = False
+
+    # Wall-side (AC) energy for home sessions with a resolved
+    # charger: charger.draw_kw x duration. AC draw is flat for
+    # the whole session (observed consistently -- no ramp/taper
+    # like DC fast charging), so this simple form holds up. Cost
+    # is billed on this when available (the generated `cost`
+    # column falls back to energy_added_kwh otherwise) since
+    # that's what the meter actually charges for, not what
+    # reaches the battery after onboard-charger conversion loss.
+    kwh_drawn = None
+    charge_efficiency = None
+    charger_id = detect_charger(open_session["started_at"], ended_at) if location_type == "home" else None
+    if location_type == "home" and charger_id and energy_added_kwh is not None:
+        chargers = sb_get("chargers", {"id": f"eq.{charger_id}", "select": "draw_kw", "limit": "1"})
+        if chargers and chargers[0].get("draw_kw") is not None:
+            duration_hours = (parse_ts(ended_at) - parse_ts(open_session["started_at"])).total_seconds() / 3600
+            kwh_drawn = float(chargers[0]["draw_kw"]) * duration_hours
+            if kwh_drawn > 0:
+                charge_efficiency = energy_added_kwh / kwh_drawn
+
+    # Same odometer sanity check as session-open: never let a
+    # reading below the last known value (bad telemetry, not a
+    # real odometer decrease) get stored.
+    end_odo = end_state.get("odometer_km")
+    prev_odo_close = last_full.get("odometer_km") if last_full else None
+    if prev_odo_close is not None and (end_odo is None or float(end_odo) < float(prev_odo_close)):
+        print(f"warning: odometer reading {end_odo} is implausible (last known: {prev_odo_close}), using last known value instead", file=sys.stderr)
+        end_odo = prev_odo_close
+
+    sb_patch(
+        "charging_sessions",
+        open_session["id"],
+        {
+            "ended_at": ended_at,
+            "end_pct": end_pct,
+            "end_odometer_km": end_odo,
+            "end_range_km": end_range_km,
+            "range_added_km": range_added_km,
+            "energy_added_kwh": energy_added_kwh,
+            "electricity_rate": electricity_rate,
+            "km_since_last_charge": km_since_last_charge,
+            "rate_confirmed": rate_confirmed,
+            "charger_id": charger_id,
+            "kwh_drawn": kwh_drawn,
+            "charge_efficiency": charge_efficiency,
+        },
+    )
+    print(
+        f"charging session closed: {pct_delta}% added, "
+        f"{energy_added_kwh} kWh @ {location_type} rate ({estimate_method})"
+        + (f", {kwh_drawn:.2f} kWh drawn, {charge_efficiency:.0%} efficiency" if kwh_drawn is not None else "")
+    )
+
+    cost = (kwh_drawn if kwh_drawn is not None else energy_added_kwh)
+    cost = cost * electricity_rate if (cost is not None and electricity_rate is not None) else None
+    notify_charge_finished(
+        location_type=location_type,
+        start_pct=start_pct,
+        end_pct=end_pct,
+        range_added_km=range_added_km,
+        energy_kwh=energy_added_kwh,
+        cost=cost,
+        rate_confirmed=rate_confirmed,
+        session_id=open_session["id"],
+    )
+
+
 def main() -> None:
     # No throttle here any more: a poll only runs when the scheduler says
     # it is due (pg_cron poll_tick) or someone forced it. What to do next,
@@ -793,8 +958,10 @@ def main() -> None:
         # push a notification: a single flaky poll isn't worth waking
         # Dan up for, and the next scheduled poll just retries.
         print(f"BYD error, skipping this poll cleanly: {err}", file=sys.stderr)
+        record_poll_error(str(err), prev_snapshot, settings)
         return
     now = datetime.now(timezone.utc).isoformat()
+    full_update_error = state.pop("full_update_error", None)
 
     prev_is_charging = bool(prev_snapshot["is_charging"]) if prev_snapshot else None
 
@@ -811,8 +978,35 @@ def main() -> None:
         snapshot_fields["connect_state"] = None
     sb_insert("vehicle_snapshots", {"recorded_at": now, **snapshot_fields})
     print(f"snapshot written: battery={state['battery_pct']}% charging={state['is_charging']}")
+    # Data is flowing again: re-arm the outage alert. A partial failure
+    # (car-side update failed, light check used) is still recorded so it
+    # can be seen, but doesn't count as an outage.
+    health = {"outage_alerted_at": None}
+    if full_update_error:
+        health.update({"last_poll_error": f"full update failed: {full_update_error}", "last_poll_error_at": now})
+    try:
+        sb_patch("tracker_settings", "true", health)
+    except Exception as exc:  # noqa: BLE001
+        print(f"warning: could not update poll health: {exc}", file=sys.stderr)
 
     current_is_charging = bool(state["is_charging"])
+    gap_restart = False
+
+    # Battery % went DOWN between two "charging" readings: impossible
+    # within one charge, so the car was unplugged, driven and replugged
+    # while polls weren't landing (confirmed live: a 4.5-day gap left one
+    # session open across two separate charges, showing 115h elapsed).
+    # Close the old session at its last real reading, then let the normal
+    # logic below open a fresh one for the charge running now.
+    if (current_is_charging and open_session_before is not None and prev_snapshot
+            and prev_is_charging and state["battery_pct"] is not None
+            and prev_snapshot.get("battery_pct") is not None
+            and float(state["battery_pct"]) < float(prev_snapshot["battery_pct"]) - 1):
+        print(f"battery dropped {prev_snapshot['battery_pct']}% -> {state['battery_pct']}% while 'charging': "
+              "closing the old session and starting a new one")
+        close_session(open_session_before, prev_snapshot["recorded_at"], prev_snapshot, settings, last_full)
+        open_session_before = None
+        gap_restart = True  # new session starts "now", not a midpoint into the gap
 
     # A charge is running and no session is open for it: open one. Judged
     # from the actual state rather than "did the previous snapshot say
@@ -823,7 +1017,7 @@ def main() -> None:
         # "not charging" check and this one (noticing time is always late).
         session_started_at = (
             midpoint_iso(prev_snapshot["recorded_at"], now)
-            if (prev_snapshot and not prev_is_charging) else now
+            if (prev_snapshot and not prev_is_charging and not gap_restart) else now
         )
         location_type = classify_location(state["latitude"], state["longitude"], settings)
         # Odometers only ever increase. A reading at or below the
@@ -867,123 +1061,26 @@ def main() -> None:
     # A charge has ended and a session is still open: close it.
     elif (not current_is_charging) and open_session_before is not None:
         open_session = open_session_before
-        # Likewise the end: halfway between the last "charging" check and this one.
-        ended_at = (
-            midpoint_iso(prev_snapshot["recorded_at"], now)
-            if (prev_snapshot and prev_is_charging) else now
-        )
-        if parse_ts(ended_at) <= parse_ts(open_session["started_at"]):
-            ended_at = now
-        start_pct = open_session["start_pct"]
-        end_pct = state["battery_pct"]
-        pct_delta = (end_pct - start_pct) if (start_pct is not None and end_pct is not None) else None
-
-        energy_added_kwh = integrate_energy_kwh(open_session["started_at"], ended_at)
-        estimate_method = "integrated"
-        if energy_added_kwh is None:
-            energy_added_kwh = (
-                (pct_delta / 100.0) * settings["battery_capacity_kwh"] if pct_delta is not None else None
-            )
-            estimate_method = "pct_estimate"
-
-        last_closed = get_last_closed_session()
-        km_since_last_charge = None
-        if last_closed and last_closed.get("end_odometer_km") is not None and state["odometer_km"] is not None:
-            km_since_last_charge = open_session["start_odometer_km"] - last_closed["end_odometer_km"]
-
-        start_range_km = open_session.get("start_range_km")
-        end_range_km = state["range_km"]
-        range_added_km = (
-            end_range_km - start_range_km if (start_range_km is not None and end_range_km is not None) else None
-        )
-
-        location_type = open_session.get("location_type") or "unknown"
-        if location_type == "home" and settings.get("home_rate_per_kwh") is not None:
-            # Time-weighted across whichever hour-of-day rate windows this
-            # session actually spans (e.g. cheap 12am-6am, default rest of
-            # day) -- falls back to the flat default rate automatically
-            # when no windows are configured, since an empty list just
-            # means every hour uses default_rate.
-            raw_windows = sb_get("home_rate_windows", {"select": "start_hour,end_hour,rate_per_kwh"})
-            rate_windows = [
-                {"start_hour": int(w["start_hour"]), "end_hour": int(w["end_hour"]), "rate_per_kwh": float(w["rate_per_kwh"])}
-                for w in raw_windows
-            ]
-            electricity_rate = time_weighted_rate(
-                parse_ts(open_session["started_at"]), parse_ts(ended_at), float(settings["home_rate_per_kwh"]), rate_windows
-            )
-            rate_confirmed = True
-        elif location_type == "public" and settings.get("public_rate_per_kwh") is not None:
-            electricity_rate = settings["public_rate_per_kwh"]
-            rate_confirmed = False  # default estimate, not a confirmed real rate
+        # Likewise the end: halfway between the last "charging" check and
+        # this one -- unless polls weren't landing for a while, in which
+        # case the last reading actually seen charging is the honest end
+        # (a midpoint into a multi-hour gap would bill hours of charging
+        # that may never have happened, since kwh_drawn = draw x duration).
+        # The closing battery %/range come from that same reading, so energy
+        # and duration always agree (today's % could be lower than the
+        # session's start if the car was driven during the gap).
+        end_state = state
+        if prev_snapshot and prev_is_charging:
+            gap = parse_ts(now) - parse_ts(prev_snapshot["recorded_at"])
+            if gap > timedelta(minutes=30):
+                ended_at, end_state = prev_snapshot["recorded_at"], prev_snapshot
+            else:
+                ended_at = midpoint_iso(prev_snapshot["recorded_at"], now)
         else:
-            electricity_rate = settings.get("home_rate_per_kwh")  # last-resort fallback
-            rate_confirmed = False
-
-        # Wall-side (AC) energy for home sessions with a resolved
-        # charger: charger.draw_kw x duration. AC draw is flat for
-        # the whole session (observed consistently -- no ramp/taper
-        # like DC fast charging), so this simple form holds up. Cost
-        # is billed on this when available (the generated `cost`
-        # column falls back to energy_added_kwh otherwise) since
-        # that's what the meter actually charges for, not what
-        # reaches the battery after onboard-charger conversion loss.
-        kwh_drawn = None
-        charge_efficiency = None
-        charger_id = detect_charger(open_session["started_at"], ended_at) if location_type == "home" else None
-        if location_type == "home" and charger_id and energy_added_kwh is not None:
-            chargers = sb_get("chargers", {"id": f"eq.{charger_id}", "select": "draw_kw", "limit": "1"})
-            if chargers and chargers[0].get("draw_kw") is not None:
-                duration_hours = (parse_ts(ended_at) - parse_ts(open_session["started_at"])).total_seconds() / 3600
-                kwh_drawn = float(chargers[0]["draw_kw"]) * duration_hours
-                if kwh_drawn > 0:
-                    charge_efficiency = energy_added_kwh / kwh_drawn
-
-        # Same odometer sanity check as session-open: never let a
-        # reading below the last known value (bad telemetry, not a
-        # real odometer decrease) get stored.
-        end_odo = state["odometer_km"]
-        prev_odo_close = last_full.get("odometer_km") if last_full else None
-        if prev_odo_close is not None and (end_odo is None or float(end_odo) < float(prev_odo_close)):
-            print(f"warning: odometer reading {end_odo} is implausible (last known: {prev_odo_close}), using last known value instead", file=sys.stderr)
-            end_odo = prev_odo_close
-
-        sb_patch(
-            "charging_sessions",
-            open_session["id"],
-            {
-                "ended_at": ended_at,
-                "end_pct": end_pct,
-                "end_odometer_km": end_odo,
-                "end_range_km": end_range_km,
-                "range_added_km": range_added_km,
-                "energy_added_kwh": energy_added_kwh,
-                "electricity_rate": electricity_rate,
-                "km_since_last_charge": km_since_last_charge,
-                "rate_confirmed": rate_confirmed,
-                "charger_id": charger_id,
-                "kwh_drawn": kwh_drawn,
-                "charge_efficiency": charge_efficiency,
-            },
-        )
-        print(
-            f"charging session closed: {pct_delta}% added, "
-            f"{energy_added_kwh} kWh @ {location_type} rate ({estimate_method})"
-            + (f", {kwh_drawn:.2f} kWh drawn, {charge_efficiency:.0%} efficiency" if kwh_drawn is not None else "")
-        )
-
-        cost = (kwh_drawn if kwh_drawn is not None else energy_added_kwh)
-        cost = cost * electricity_rate if (cost is not None and electricity_rate is not None) else None
-        notify_charge_finished(
-            location_type=location_type,
-            start_pct=start_pct,
-            end_pct=end_pct,
-            range_added_km=range_added_km,
-            energy_kwh=energy_added_kwh,
-            cost=cost,
-            rate_confirmed=rate_confirmed,
-            session_id=open_session["id"],
-        )
+            ended_at = now
+        if parse_ts(ended_at) <= parse_ts(open_session["started_at"]):
+            ended_at, end_state = now, state
+        close_session(open_session, ended_at, end_state, settings, last_full)
 
     # Auto-stop: if a limit is configured and the car is currently
     # charging at or above it, attempt to stop. Checked every poll while
