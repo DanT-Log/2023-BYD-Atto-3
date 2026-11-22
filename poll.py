@@ -636,6 +636,10 @@ async def fetch_vehicle_state(mode: str, open_session: dict | None, last_full: d
         if not vehicles:
             raise RuntimeError("No vehicles returned for this BYD account")
         vin = vehicles[0].vin
+        # Odometer as reported in the account's vehicle list (already
+        # fetched on every poll, so free). Recorded alongside the other
+        # sources until it's confirmed how fresh BYD keeps it.
+        vehicle_list_km = getattr(vehicles[0], "total_mileage", None)
 
         # The light check: BYD's own copy of the charging state. It carries
         # everything needed to know whether the car is plugged in, charging,
@@ -699,6 +703,7 @@ async def fetch_vehicle_state(mode: str, open_session: dict | None, last_full: d
                     "realtime": carried_raw.get("realtime"),
                     "realtime_as_of": carried.get("recorded_at"),
                     "charging": charging.model_dump(mode="json"),
+                    "vehicle_list_km": vehicle_list_km,
                 },
                 "poll_kind": "light",
             }
@@ -708,29 +713,56 @@ async def fetch_vehicle_state(mode: str, open_session: dict | None, last_full: d
             return light_payload()
 
         print(f"asking the car for a full update: {reason}")
+        # What each source returned, saved with the snapshot so it's
+        # obvious which ones work (BYD switched off the realtime request
+        # for this car in Nov 2026, and GPS has come back empty since).
+        sources: dict = {"vehicle_list_km": vehicle_list_km}
         try:
             realtime = await client.get_vehicle_realtime(vin)
         except BydAuthenticationError:
             raise
         except BydError as exc:
-            # Confirmed live (Nov 2026): this car-side call failed on every
-            # poll for 4.5 days. Because a full update is required whenever
-            # a charge has ended, that blocked the session from ever
-            # closing and no snapshot was written at all. The light check
-            # above already knows plugged/charging/battery %, which is all
-            # opening or closing a session needs -- so carry on with that
-            # and only lose the odometer/location for this one poll.
-            print(f"warning: full update failed, using the light check instead: {exc}", file=sys.stderr)
-            payload = light_payload()
-            payload["full_update_error"] = str(exc)
-            return payload
+            # Confirmed live (Nov 2026): code 1001 "not supported for VIN"
+            # on every poll for 4.5 days, which blocked sessions from
+            # closing. The light check already has plugged/charging/
+            # battery %, so carry on with that plus the other sources.
+            print(f"warning: realtime request failed, using other sources: {exc}", file=sys.stderr)
+            realtime = None
+            sources["realtime_error"] = str(exc)
 
         try:
             gps = await client.get_gps_info(vin)
             latitude, longitude = gps.latitude, gps.longitude
+            sources["gps"] = gps.model_dump(mode="json")
+        except BydAuthenticationError:
+            raise
         except Exception as exc:  # noqa: BLE001 - GPS is best-effort
             print(f"warning: GPS fetch failed, continuing without it: {exc}", file=sys.stderr)
             latitude = longitude = None
+            sources["gps_error"] = f"{type(exc).__name__}: {exc}"[:300]
+
+        # Lifetime km from BYD's energy-usage report: a cloud read, not a
+        # request to the car, so it should survive the realtime switch-off.
+        energy_km = None
+        try:
+            energy = await client.get_energy_consumption(vin)
+            cum = energy.cumulative_energy_consumption
+            if cum is not None:
+                energy_km = cum.total_mileage
+                sources["energy_km"] = energy_km
+                sources["energy_unit"] = cum.mileage_unit
+        except BydAuthenticationError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - best-effort
+            sources["energy_error"] = f"{type(exc).__name__}: {exc}"[:300]
+
+        if realtime is None:
+            payload = light_payload()
+            odometer = next((float(v) for v in (energy_km, vehicle_list_km) if v is not None and float(v) > 0), None)
+            payload.update({"odometer_km": odometer, "latitude": latitude, "longitude": longitude})
+            payload["raw"]["sources"] = sources
+            payload["full_update_error"] = sources["realtime_error"]
+            return payload
 
         # Prefer the dedicated charging endpoint's values; fall back to the
         # general realtime blob if a field is missing there.
@@ -764,6 +796,7 @@ async def fetch_vehicle_state(mode: str, open_session: dict | None, last_full: d
             "raw": {
                 "realtime": realtime.model_dump(mode="json"),
                 "charging": charging.model_dump(mode="json"),
+                "sources": sources,
             },
             "poll_kind": "full",
         }
